@@ -407,6 +407,30 @@ public class ClusterService extends AbstractLifecycleComponent {
     public static final String SETTING_SYSTEM_INDEX_INSERT_ONLY = "es.index_insert_only";
     public static final String SETTING_SYSTEM_INDEX_OPAQUE_STORAGE = "es.index_opaque_storage";
 
+    /** Elassandra: publish local shard routing into gossip-related path (side-car stub). */
+    public void publishShardRoutingState(String indexName, org.opensearch.cluster.routing.ShardRoutingState state) {
+    }
+
+    /** Elassandra: internal cluster-state publish hook (side-car stub). */
+    public void publishX1() {
+    }
+
+    /** Elassandra: search routing refresh (side-car stub). */
+    public org.elassandra.cluster.routing.PrimaryFirstSearchStrategy.PrimaryFirstRouter updateRouter(
+        org.opensearch.cluster.metadata.IndexMetadata indexMetadata,
+        org.opensearch.cluster.ClusterState state
+    ) {
+        return null;
+    }
+
+    /** Elassandra: current search strategy router (side-car stub). */
+    public org.elassandra.cluster.routing.AbstractSearchStrategy.Router getRouter(
+        org.opensearch.cluster.metadata.IndexMetadata indexMetadata,
+        org.opensearch.cluster.ClusterState state
+    ) {
+        return null;
+    }
+
     /**
      * Elassandra: CQL process (fork parity). Delegates to Cassandra {@code QueryProcessor} for side-car compile.
      */

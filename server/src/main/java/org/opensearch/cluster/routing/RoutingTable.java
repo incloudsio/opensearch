@@ -29,6 +29,7 @@ import org.opensearch.cluster.Diffable;
 import org.opensearch.cluster.DiffableUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
+import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;
 import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
@@ -181,19 +182,33 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         return shards;
     }
 
+    /** Count shards matching a predicate (OpenSearch API; used by {@link UnassignedInfo}). */
+    public int shardsMatchingPredicateCount(Predicate<ShardRouting> predicate) {
+        int count = 0;
+        for (ShardRouting shard : allShards()) {
+            if (predicate.test(shard)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     /*
      * Block until all local primary shard are started (always has index 0 in routing table)
      */
     public boolean isLocalShardsStarted() {
         for (IndexRoutingTable indexRoutingTable : this) {
             IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
-            if (indexShardRoutingTable != null & indexShardRoutingTable.getPrimaryShardRouting() != null) {
-                switch(indexShardRoutingTable.getPrimaryShardRouting().state()) {
+            if (indexShardRoutingTable != null && indexShardRoutingTable.primaryShard() != null) {
+                switch (indexShardRoutingTable.primaryShard().state()) {
                 case UNASSIGNED:
                 case INITIALIZING:
                 case RELOCATING:
-                        return false;
-                case STARTED :
+                    return false;
+                case STARTED:
+                    break;
+                default:
+                    return false;
                 }
             }
         }
@@ -406,8 +421,11 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
 
         RoutingTableDiff(StreamInput in) throws IOException {
             version = in.readLong();
-            indicesRouting = DiffableUtils.readImmutableOpenMapDiff(in, DiffableUtils.getStringKeySerializer(), IndexRoutingTable::readFrom,
-                IndexRoutingTable::readDiffFrom);
+            indicesRouting = DiffableUtils.readImmutableOpenMapDiff(
+                in,
+                DiffableUtils.getStringKeySerializer(),
+                new DiffableUtils.DiffableValueReader<>(IndexRoutingTable::readFrom, IndexRoutingTable::readDiffFrom)
+            );
         }
 
         @Override
@@ -637,6 +655,14 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
                 add(indexRoutingBuilder);
             }
             return this;
+        }
+
+        public Builder addAsFromOpenToClose(IndexMetadata indexMetadata) {
+            assert isIndexVerifiedBeforeClosed(indexMetadata);
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsFromOpenToClose(
+                indexMetadata
+            );
+            return add(indexRoutingBuilder);
         }
 
         public Builder addAsRestore(IndexMetadata indexMetaData, SnapshotRecoverySource recoverySource) {

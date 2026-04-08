@@ -461,6 +461,7 @@ public abstract class IndexShardTestCase extends OpenSearchTestCase {
             );
             indexShard = new IndexShard(
                 routing,
+                null,
                 indexSettings,
                 shardPath,
                 store,

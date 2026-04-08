@@ -793,6 +793,11 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         return getIndexMetadata().keyspace();
     }
 
+    /** Elassandra: legacy per-type mapping names (single-type indices use {@link #SINGLE_MAPPING_NAME}). */
+    public java.util.Set<String> types() {
+        return java.util.Collections.singleton(SINGLE_MAPPING_NAME);
+    }
+
     /** Fork named this getIndexMetaData; OpenSearch uses getIndexMetadata. */
     public org.opensearch.cluster.metadata.IndexMetadata getIndexMetadata() {
         return indexSettings.getIndexMetadata();

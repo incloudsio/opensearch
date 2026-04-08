@@ -46,6 +46,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.node.Node;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -441,6 +442,13 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
         } catch (IllegalArgumentException e) {
             return java.util.UUID.nameUUIDFromBytes(getId().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
+    }
+
+    /**
+     * Elassandra: bound IP for Cassandra token metadata / ring alignment (fork used node name IP; OpenSearch exposes transport address).
+     */
+    public InetAddress getNameAsInetAddress() {
+        return address.address().getAddress();
     }
 
     /**

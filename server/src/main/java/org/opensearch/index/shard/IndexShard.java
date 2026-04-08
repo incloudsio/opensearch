@@ -204,6 +204,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     private final ThreadPool threadPool;
     private final MapperService mapperService;
+    /** Elassandra: parent index service (fork parity). */
+    private final IndexService indexService;
     private final IndexCache indexCache;
     private final Store store;
     private final InternalIndexingStats internalIndexingStats;
@@ -297,6 +299,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     public IndexShard(
         final ShardRouting shardRouting,
+        final IndexService indexService,
         final IndexSettings indexSettings,
         final ShardPath path,
         final Store store,
@@ -320,6 +323,7 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         super(shardRouting.shardId(), indexSettings);
         assert shardRouting.initializing();
         this.shardRouting = shardRouting;
+        this.indexService = indexService;
         final Settings settings = indexSettings.getSettings();
         this.codecService = new CodecService(mapperService, logger);
         this.warmer = warmer;
@@ -425,6 +429,11 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
 
     public MapperService mapperService() {
         return mapperService;
+    }
+
+    /** Elassandra: owning {@link IndexService} (fork parity). */
+    public IndexService indexService() {
+        return indexService;
     }
 
     public SearchOperationListener getSearchOperationListener() {

@@ -543,7 +543,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent imple
             final IndexMetadata currentIndexMetadata = indexService.getIndexSettings().getIndexMetadata();
             final IndexMetadata newIndexMetadata = state.metadata().index(index);
             assert newIndexMetadata != null : "index " + index + " should have been removed by deleteIndices";
-            if (ClusterChangedEvent.indexMetadataChanged(currentIndexMetadata, newIndexMetadata)) {
+            if (ClusterChangedEvent.indexMetaDataChanged(currentIndexMetadata, newIndexMetadata)) {
                 String reason = null;
                 try {
                     reason = "metadata update failed";

@@ -503,6 +503,7 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
             eventListener.onStoreCreated(shardId);
             indexShard = new IndexShard(
                 routing,
+                this,
                 this.indexSettings,
                 path,
                 store,
@@ -781,6 +782,11 @@ public class IndexService extends AbstractIndexComponent implements IndicesClust
 
     public IndexMetadata getMetadata() {
         return indexSettings.getIndexMetadata();
+    }
+
+    /** Elassandra: Cassandra keyspace for this index. */
+    public String keyspace() {
+        return getMetadata().keyspace();
     }
 
     private final CopyOnWriteArrayList<Consumer<IndexMetadata>> metadataListeners = new CopyOnWriteArrayList<>();

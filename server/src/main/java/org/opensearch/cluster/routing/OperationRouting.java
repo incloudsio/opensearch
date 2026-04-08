@@ -207,7 +207,7 @@ public class OperationRouting {
                 for (String r : effectiveRouting) {
                     final int routingPartitionSize = indexMetadata.getRoutingPartitionSize();
                     for (int partitionOffset = 0; partitionOffset < routingPartitionSize; partitionOffset++) {
-                        set.add(RoutingTable.shardRoutingTable(indexRouting, calculateScaledShardId(indexMetadata, r, partitionOffset)));
+                        set.add(clusterState.routingTable().shardRoutingTable(index, calculateScaledShardId(indexMetadata, r, partitionOffset)));
                     }
                 }
             } else {

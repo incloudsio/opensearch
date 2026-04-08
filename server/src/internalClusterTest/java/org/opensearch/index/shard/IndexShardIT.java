@@ -760,6 +760,7 @@ public class IndexShardIT extends OpenSearchSingleNodeTestCase {
         ShardRouting initializingShardRouting = getInitializingShardRouting(shard.routingEntry());
         return new IndexShard(
             initializingShardRouting,
+            indexService,
             indexService.getIndexSettings(),
             shard.shardPath(),
             shard.store(),
