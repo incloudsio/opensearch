@@ -279,6 +279,13 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
     }
 
     /**
+     * Elassandra metadata fingerprint (cluster UUID + version), used in gossip and logging.
+     */
+    public String x2() {
+        return clusterUUID + "/" + version;
+    }
+
+    /**
      * Whether the current node with the given cluster state is locked into the cluster with the UUID returned by {@link #clusterUUID()},
      * meaning that it will not accept any cluster state with a different clusterUUID.
      */
@@ -1435,6 +1442,14 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata>, To
 
         public Builder version(long version) {
             this.version = version;
+            return this;
+        }
+
+        /**
+         * Elassandra: bump global metadata version (coordinator/PAXOS path).
+         */
+        public Builder incrementVersion() {
+            this.version = this.version + 1;
             return this;
         }
 

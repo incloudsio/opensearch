@@ -788,6 +788,16 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
      * @return Whether a field is a metadata field.
      * this method considers all mapper plugins
      */
+    /** Elassandra: Cassandra keyspace backing this index. */
+    public String keyspace() {
+        return getIndexMetadata().keyspace();
+    }
+
+    /** Fork named this getIndexMetaData; OpenSearch uses getIndexMetadata. */
+    public org.opensearch.cluster.metadata.IndexMetadata getIndexMetadata() {
+        return indexSettings.getIndexMetadata();
+    }
+
     public boolean isMetadataField(String field) {
         return mapperRegistry.isMetadataField(indexVersionCreated, field);
     }

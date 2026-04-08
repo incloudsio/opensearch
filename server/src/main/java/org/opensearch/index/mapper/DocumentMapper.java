@@ -51,11 +51,17 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.IndexAnalyzers;
+import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MapperService.MergeReason;
 import org.opensearch.index.mapper.MetadataFieldMapper.TypeParser;
 import org.opensearch.search.internal.SearchContext;
 
 import java.io.IOException;
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.schema.TableMetadata;
+import org.elassandra.cluster.SchemaManager;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -140,6 +146,11 @@ public class DocumentMapper implements ToXContentFragment {
 
     private final MetadataFieldMapper[] deleteTombstoneMetadataFieldMappers;
     private final MetadataFieldMapper[] noopTombstoneMetadataFieldMappers;
+
+    /** Elassandra: CQL WHERE fragments (lazy). */
+    private CqlFragments cqlFragments = null;
+
+    private Map<String, ColumnMetadata> columnDefs = null;
 
     public DocumentMapper(MapperService mapperService, Mapping mapping) {
         this.mapperService = mapperService;
@@ -226,6 +237,106 @@ public class DocumentMapper implements ToXContentFragment {
 
     public RoutingFieldMapper routingFieldMapper() {
         return metadataMapper(RoutingFieldMapper.class);
+    }
+
+    public org.elassandra.index.mapper.internal.TokenFieldMapper tokenFieldMapper() {
+        return metadataMapper(org.elassandra.index.mapper.internal.TokenFieldMapper.class);
+    }
+
+    public org.elassandra.index.mapper.internal.HostFieldMapper hostFieldMapper() {
+        return metadataMapper(org.elassandra.index.mapper.internal.HostFieldMapper.class);
+    }
+
+    public SeqNoFieldMapper seqNoFieldMapper() {
+        return metadataMapper(SeqNoFieldMapper.class);
+    }
+
+    public ParentFieldMapper parentFieldMapper() {
+        return metadataMapper(ParentFieldMapper.class);
+    }
+
+    public CqlFragments getCqlFragments() {
+        if (this.cqlFragments == null) {
+            synchronized (this) {
+                if (this.cqlFragments == null) {
+                    this.cqlFragments = new CqlFragments(
+                        SchemaManager.getTableMetadata(
+                            mapperService.keyspace(),
+                            SchemaManager.typeToCfName(mapperService.keyspace(), type)
+                        )
+                    );
+                }
+            }
+        }
+        return this.cqlFragments;
+    }
+
+    public Map<String, ColumnMetadata> getColumnDefinitions() {
+        if (this.columnDefs == null) {
+            synchronized (this) {
+                if (this.columnDefs == null) {
+                    TableMetadata metadata = SchemaManager.getTableMetadata(
+                        mapperService.keyspace(),
+                        SchemaManager.typeToCfName(mapperService.keyspace(), type)
+                    );
+                    this.columnDefs = new LinkedHashMap<>();
+                    for (Mapper fieldMapper : mappers()) {
+                        if (fieldMapper.name().indexOf('.') == -1) {
+                            ColumnMetadata cd = metadata.getColumn(new ColumnIdentifier(fieldMapper.name(), true));
+                            if (cd != null) {
+                                columnDefs.put(fieldMapper.name(), cd);
+                            }
+                        }
+                    }
+                    for (String name : objectMappers().keySet()) {
+                        if (name.indexOf('.') == -1) {
+                            ColumnMetadata cd = metadata.getColumn(new ColumnIdentifier(name, true));
+                            if (cd != null) {
+                                columnDefs.put(name, cd);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return this.columnDefs;
+    }
+
+    /** CQL primary-key column lists for this mapped type (Elassandra). */
+    public class CqlFragments {
+        public String ptCols;
+        public String ptWhere;
+        public String pkCols;
+        public String pkWhere;
+
+        CqlFragments(TableMetadata metadata) {
+            StringBuilder pkColsBuilder = new StringBuilder();
+            StringBuilder pkWhereBuilder = new StringBuilder();
+
+            for (ColumnMetadata cd : metadata.partitionKeyColumns()) {
+                if (pkColsBuilder.length() > 0) {
+                    pkColsBuilder.append(',');
+                    pkWhereBuilder.append(" AND ");
+                }
+                pkColsBuilder.append('"').append(cd.name.toString()).append('"');
+                pkWhereBuilder.append('"').append(cd.name.toString()).append("\" = ?");
+            }
+
+            this.ptCols = pkColsBuilder.toString();
+            this.ptWhere = pkWhereBuilder.toString();
+
+            for (ColumnMetadata cd : metadata.clusteringColumns()) {
+                if (pkColsBuilder.length() > 0) {
+                    pkColsBuilder.append(',');
+                    pkWhereBuilder.append(" AND ");
+                }
+                pkColsBuilder.append('"').append(cd.name.toString()).append('"');
+                pkWhereBuilder.append('"').append(cd.name.toString()).append("\" = ?");
+            }
+
+            this.pkCols = pkColsBuilder.toString();
+            this.pkWhere = pkWhereBuilder.toString();
+        }
     }
 
     public IndexFieldMapper IndexFieldMapper() {

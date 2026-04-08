@@ -1182,7 +1182,7 @@ public class NumberFieldMapper extends ParametrizedFieldMapper {
             numericValue = fieldType().type.parse(value, coerce.value());
         }
 
-        context.doc().addAll(fieldType().type.createFields(fieldType().name(), numericValue, indexed, hasDocValues, stored));
+        for (org.apache.lucene.document.Field f : fieldType().type.createFields(fieldType().name(), numericValue, indexed, hasDocValues, stored)) { context.doc().add(f); }
 
         if (hasDocValues == false && (stored || indexed)) {
             createFieldNamesField(context);

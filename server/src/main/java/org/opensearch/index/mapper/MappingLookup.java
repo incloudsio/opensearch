@@ -263,4 +263,12 @@ public final class MappingLookup implements Iterable<Mapper> {
         }
         return field.substring(0, lastDot);
     }
+
+    /**
+     * Elassandra compatibility ({@code DocumentFieldMappers#smartNameFieldMapper} from ES 6).
+     */
+    public FieldMapper smartNameFieldMapper(String name) {
+        Mapper m = getMapper(name);
+        return m instanceof FieldMapper ? (FieldMapper) m : null;
+    }
 }

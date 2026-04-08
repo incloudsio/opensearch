@@ -60,6 +60,9 @@ public class TypeParsers {
     public static final String INDEX_OPTIONS_POSITIONS = "positions";
     public static final String INDEX_OPTIONS_OFFSETS = "offsets";
 
+    /** Elassandra mapping extension. */
+    public static final String CQL_MANDATORY = "cql_mandatory";
+
     public static void checkNull(String propName, Object propNode) {
         if (false == propName.equals("null_value") && propNode == null) {
             /*

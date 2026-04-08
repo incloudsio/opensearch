@@ -1,12 +1,4 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
  * Licensed to Elasticsearch under one or more contributor
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
@@ -25,32 +17,23 @@
  * under the License.
  */
 
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
 package org.opensearch.index.mapper;
 
 import com.carrotsearch.hppc.ObjectObjectHashMap;
 import com.carrotsearch.hppc.ObjectObjectMap;
+import com.google.common.collect.Iterators;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.LegacyESVersion;
+import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.common.lucene.all.AllEntries;
 import org.opensearch.common.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
-public abstract class ParseContext implements Iterable<ParseContext.Document> {
+public abstract class ParseContext implements Iterable<ParseContext.Document>{
 
     /** Fork of {@link org.apache.lucene.document.Document} with additional functionality. */
     public static class Document implements Iterable<IndexableField> {
@@ -61,7 +44,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
         private final List<IndexableField> fields;
         private ObjectObjectMap<Object, IndexableField> keyedFields;
 
-        private Document(String path, Document parent) {
+        public Document(String path, Document parent) {
             fields = new ArrayList<>();
             this.path = path;
             this.prefix = path.isEmpty() ? "" : path + ".";
@@ -70,6 +53,10 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
 
         public Document() {
             this("", null);
+        }
+
+        public String toString() {
+            return "path="+path+" prefix="+prefix+" fields="+fields+" parent="+parent;
         }
 
         /**
@@ -102,10 +89,6 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
             return fields;
         }
 
-        public void addAll(List<? extends IndexableField> fields) {
-            this.fields.addAll(fields);
-        }
-
         public void add(IndexableField field) {
             // either a meta fields or starts with the prefix
             assert field.name().startsWith("_") || field.name().startsWith(prefix) : field.name() + " " + prefix;
@@ -136,6 +119,24 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
                 }
             }
             return f.toArray(new IndexableField[f.size()]);
+        }
+
+        /**
+         * Returns an array of values of the field specified as the method parameter.
+         * This method returns an empty array when there are no
+         * matching fields.  It never returns null.
+         * If you want the actual numeric field instances back, use {@link #getFields}.
+         * @param name the name of the field
+         * @return a <code>String[]</code> of field values
+         */
+        public final String[] getValues(String name) {
+            List<String> result = new ArrayList<>();
+            for (IndexableField field : fields) {
+                if (field.name().equals(name) && field.stringValue() != null) {
+                    result.add(field.stringValue());
+                }
+            }
+            return result.toArray(new String[result.size()]);
         }
 
         public IndexableField getField(String name) {
@@ -226,6 +227,11 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
         }
 
         @Override
+        public List<Document> docs() {
+            return in.docs();
+        }
+
+        @Override
         protected void addDoc(Document doc) {
             in.addDoc(doc);
         }
@@ -263,6 +269,11 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
         @Override
         public void seqID(SeqNoFieldMapper.SequenceIDFields seqID) {
             in.seqID(seqID);
+        }
+
+        @Override
+        public AllEntries allEntries() {
+            return in.allEntries();
         }
 
         @Override
@@ -323,9 +334,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
 
         private SeqNoFieldMapper.SequenceIDFields seqID;
 
-        private final long maxAllowedNumNestedDocs;
-
-        private long numNestedDocs;
+        private final AllEntries allEntries;
 
         private final List<Mapper> dynamicMappers;
 
@@ -333,13 +342,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
 
         private final Set<String> ignoredFields = new HashSet<>();
 
-        public InternalParseContext(
-            IndexSettings indexSettings,
-            DocumentMapperParser docMapperParser,
-            DocumentMapper docMapper,
-            SourceToParse source,
-            XContentParser parser
-        ) {
+        public InternalParseContext(IndexSettings indexSettings, DocumentMapperParser docMapperParser, DocumentMapper docMapper,
+                                    SourceToParse source, XContentParser parser) {
             this.indexSettings = indexSettings;
             this.docMapper = docMapper;
             this.docMapperParser = docMapperParser;
@@ -350,9 +354,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
             this.documents.add(document);
             this.version = null;
             this.sourceToParse = source;
+            this.allEntries = new AllEntries();
             this.dynamicMappers = new ArrayList<>();
-            this.maxAllowedNumNestedDocs = indexSettings.getMappingNestedDocsLimit();
-            this.numNestedDocs = 0L;
         }
 
         @Override
@@ -385,7 +388,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
             return documents.get(0);
         }
 
-        List<Document> docs() {
+        @Override
+        public List<Document> docs() {
             return this.documents;
         }
 
@@ -396,17 +400,6 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
 
         @Override
         protected void addDoc(Document doc) {
-            numNestedDocs++;
-            if (numNestedDocs > maxAllowedNumNestedDocs) {
-                throw new MapperParsingException(
-                    "The number of nested documents has exceeded the allowed limit of ["
-                        + maxAllowedNumNestedDocs
-                        + "]."
-                        + " This limit can be set by changing the ["
-                        + MapperService.INDEX_MAPPING_NESTED_DOCS_LIMIT_SETTING.getKey()
-                        + "] index level setting."
-                );
-            }
             this.documents.add(doc);
         }
 
@@ -446,6 +439,11 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
         }
 
         @Override
+        public AllEntries allEntries() {
+            return this.allEntries;
+        }
+
+        @Override
         public void addDynamicMapper(Mapper mapper) {
             dynamicMappers.add(mapper);
         }
@@ -468,7 +466,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
                 docsReversed = true;
                 if (indexSettings.getIndexVersionCreated().onOrAfter(LegacyESVersion.V_6_5_0)) {
                     /**
-                     * For indices created on or after {@link LegacyESVersion#V_6_5_0} we preserve the order
+                     * For indices created on or after {@link Version#V_6_5_0} we preserve the order
                      * of the children while ensuring that parents appear after them.
                      */
                     List<Document> newDocs = reorderParent(documents);
@@ -481,27 +479,11 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
             }
         }
 
-        /**
-         * Returns a copy of the provided {@link List} where parent documents appear
-         * after their children.
-         */
-        private List<Document> reorderParent(List<Document> docs) {
-            List<Document> newDocs = new ArrayList<>(docs.size());
-            LinkedList<Document> parents = new LinkedList<>();
-            for (Document doc : docs) {
-                while (parents.peek() != doc.getParent()) {
-                    newDocs.add(parents.poll());
-                }
-                parents.add(0, doc);
-            }
-            newDocs.addAll(parents);
-            return newDocs;
-        }
-
         @Override
         public Iterator<Document> iterator() {
             return documents.iterator();
         }
+
 
         @Override
         public void addIgnoredField(String field) {
@@ -515,10 +497,28 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
     }
 
     /**
+     * Returns a copy of the provided {@link List} where parent documents appear
+     * after their children.
+     */
+    protected List<Document> reorderParent(List<Document> docs) {
+        List<Document> newDocs = new ArrayList<>(docs.size());
+        LinkedList<Document> parents = new LinkedList<>();
+        for (Document doc : docs) {
+            while (parents.peek() != doc.getParent()){
+                newDocs.add(parents.poll());
+            }
+            parents.add(0, doc);
+        }
+        newDocs.addAll(parents);
+        return newDocs;
+    }
+
+    /**
      * Returns an Iterable over all non-root documents. If there are no non-root documents
      * the iterable will return an empty iterator.
      */
     public abstract Iterable<Document> nonRootDocuments();
+
 
     /**
      * Add the given {@code field} to the set of ignored fields.
@@ -531,6 +531,22 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
     public abstract Collection<String> getIgnoredFields();
 
     public abstract DocumentMapperParser docMapperParser();
+
+    /** Return a view of this {@link ParseContext} that changes the return
+     *  value of {@link #getIncludeInAllDefault()}. */
+    public final ParseContext setIncludeInAllDefault(boolean includeInAll) {
+        return new FilterParseContext(this) {
+            @Override
+            public Boolean getIncludeInAllDefault() {
+                return includeInAll;
+            }
+        };
+    }
+
+    /** Whether field values should be added to the _all field by default. */
+    public Boolean getIncludeInAllDefault() {
+        return null;
+    }
 
     /**
      * Return a new context that will be within a copy-to operation.
@@ -563,7 +579,7 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
     /**
      * Return a new context that will be used within a nested document.
      */
-    public final ParseContext createNestedContext(String fullPath) {
+    public ParseContext createNestedContext(String fullPath) {
         final Document doc = new Document(fullPath, doc());
         addDoc(doc);
         return switchDoc(doc);
@@ -601,6 +617,10 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
 
     public abstract SourceToParse sourceToParse();
 
+    public void source(BytesReference source) {
+
+    }
+
     public abstract ContentPath path();
 
     public abstract XContentParser parser();
@@ -608,6 +628,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
     public abstract Document rootDoc();
 
     public abstract Document doc();
+
+    public abstract List<Document> docs();
 
     protected abstract void addDoc(Document doc);
 
@@ -619,11 +641,63 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
 
     public abstract Field version();
 
+    public String type() {
+        return this.sourceToParse().type();
+    }
+
+    public String id() {
+        return this.sourceToParse().id();
+    }
+
     public abstract void version(Field version);
 
     public abstract SeqNoFieldMapper.SequenceIDFields seqID();
 
     public abstract void seqID(SeqNoFieldMapper.SequenceIDFields seqID);
+
+    /**
+     * Elasticsearch exposes {@code DocumentMapper#allFieldMapper()}; OpenSearch 7+ removed the global {@code _all} field.
+     */
+    private boolean allFieldMapperEnabled(DocumentMapper dm) {
+        try {
+            java.lang.reflect.Method m = dm.getClass().getMethod("allFieldMapper");
+            Object afm = m.invoke(dm);
+            return (Boolean) afm.getClass().getMethod("enabled").invoke(afm);
+        } catch (ReflectiveOperationException e) {
+            return true;
+        }
+    }
+
+    public final boolean includeInAll(Boolean includeInAll, FieldMapper mapper) {
+        return includeInAll(includeInAll, mapper.fieldType().isSearchable());
+    }
+
+    /**
+     * Is all included or not. Will always disable it if AllFieldMapper enabled state
+     * is {@code false}. If its enabled, then will return {@code true} only if the specific flag is {@code null} or
+     * its actual value (so, if not set, defaults to "true") and the field is indexed.
+     */
+    private boolean includeInAll(Boolean includeInAll, boolean indexed) {
+        if (isWithinCopyTo()) {
+            return false;
+        }
+        if (isWithinMultiFields()) {
+            return false;
+        }
+        if (!allFieldMapperEnabled(docMapper())) {
+            return false;
+        }
+        if (includeInAll == null) {
+            includeInAll = getIncludeInAllDefault();
+        }
+        // not explicitly set
+        if (includeInAll == null) {
+            return indexed;
+        }
+        return includeInAll;
+    }
+
+    public abstract AllEntries allEntries();
 
     /**
      * Return a new context that will have the external value set.
@@ -634,7 +708,6 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
             public boolean externalValueSet() {
                 return true;
             }
-
             @Override
             public Object externalValue() {
                 return externalValue;
@@ -661,9 +734,8 @@ public abstract class ParseContext implements Iterable<ParseContext.Document> {
         }
 
         if (!clazz.isInstance(externalValue())) {
-            throw new IllegalArgumentException(
-                "illegal external value class [" + externalValue().getClass().getName() + "]. Should be " + clazz.getName()
-            );
+            throw new IllegalArgumentException("illegal external value class ["
+                    + externalValue().getClass().getName() + "]. Should be " + clazz.getName());
         }
         return clazz.cast(externalValue());
     }

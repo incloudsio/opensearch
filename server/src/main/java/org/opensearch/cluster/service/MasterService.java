@@ -72,6 +72,7 @@ import org.opensearch.threadpool.Scheduler;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -856,10 +857,10 @@ public class MasterService extends AbstractLifecycleComponent {
     /**
      * Represents a set of tasks to be processed together with their executor
      */
-    private class TaskInputs {
-        final String summary;
-        final List<Batcher.UpdateTask> updateTasks;
-        final ClusterStateTaskExecutor<Object> executor;
+    public class TaskInputs {
+        public final String summary;
+        public final List<Batcher.UpdateTask> updateTasks;
+        public final ClusterStateTaskExecutor<Object> executor;
 
         TaskInputs(ClusterStateTaskExecutor<Object> executor, List<Batcher.UpdateTask> updateTasks, String summary) {
             this.summary = summary;
@@ -873,6 +874,16 @@ public class MasterService extends AbstractLifecycleComponent {
 
         void onNoLongerMaster() {
             updateTasks.forEach(task -> task.listener.onNoLongerMaster(task.source()));
+        }
+
+        /** Elassandra: rebuild task map when resubmitting after PAXOS conflict (fork parity). */
+        public Map<Object, ClusterStateTaskListener> updateTasksToMap(Priority priority, final long lostTimeMillis) {
+            Map<Object, ClusterStateTaskListener> map = new HashMap<>();
+            for (Batcher.UpdateTask updateTask : updateTasks) {
+                map.put(updateTask.task, updateTask.listener);
+                priority = priority.sameOrAfter(updateTask.priority()) ? updateTask.priority() : priority;
+            }
+            return map;
         }
     }
 

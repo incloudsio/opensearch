@@ -486,4 +486,9 @@ public abstract class MappedFieldType {
     public TextSearchInfo getTextSearchInfo() {
         return textSearchInfo;
     }
+
+    /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car stub). */
+    public Object cqlValue(Object value, org.apache.cassandra.db.marshal.AbstractType<?> type) {
+        return value;
+    }
 }

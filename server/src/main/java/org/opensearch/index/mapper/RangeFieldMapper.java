@@ -262,6 +262,11 @@ public class RangeFieldMapper extends ParametrizedFieldMapper {
             return rangeType;
         }
 
+        /** Elassandra CQL serialization (fork parity; side-car stub). */
+        public Object cqlValue(Object value) {
+            return value;
+        }
+
         @Override
         public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
             failIfNoDocValues();
@@ -482,11 +487,95 @@ public class RangeFieldMapper extends ParametrizedFieldMapper {
                 );
             }
         }
-        context.doc().addAll(fieldType().rangeType.createFields(context, name(), range, index, hasDocValues, store));
+        for (org.apache.lucene.index.IndexableField f : fieldType().rangeType.createFields(context, name(), range, index, hasDocValues, store)) { context.doc().add(f); }
 
         if (hasDocValues == false && (index || store)) {
             createFieldNamesField(context);
         }
+    }
+
+    public Range parse(Object value) throws IOException {
+        if (value instanceof String && fieldType().rangeType == RangeType.IP) {
+            org.opensearch.common.xcontent.XContentParser __p =
+                org.opensearch.common.xcontent.json.JsonXContent.jsonXContent.createParser(
+                    org.opensearch.common.xcontent.NamedXContentRegistry.EMPTY,
+                    org.opensearch.common.xcontent.DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                    "\"" + (String) value + "\"");
+            __p.nextToken();
+            return parseIpRangeFromCidr(__p);
+        }
+        if (value instanceof Map) {
+            Map<String, Object> mapValue = (Map<String, Object>) value;
+
+            // build a JSON doc to parse it
+            org.opensearch.common.xcontent.XContentBuilder builder =
+                org.opensearch.common.xcontent.XContentFactory.contentBuilder(org.opensearch.common.xcontent.XContentType.JSON)
+                    .humanReadable(true);
+            builder.startObject();
+            if (mapValue.containsKey(GT_FIELD.getPreferredName()))
+                builder.field(GT_FIELD.getPreferredName(), mapValue.get(GT_FIELD.getPreferredName()));
+
+            if (mapValue.containsKey(GTE_FIELD.getPreferredName()))
+                builder.field(GTE_FIELD.getPreferredName(), mapValue.get(GTE_FIELD.getPreferredName()));
+
+            if (mapValue.containsKey(LT_FIELD.getPreferredName()))
+                builder.field(LT_FIELD.getPreferredName(), mapValue.get(LT_FIELD.getPreferredName()));
+
+            if (mapValue.containsKey(LTE_FIELD.getPreferredName()))
+                builder.field(LTE_FIELD.getPreferredName(), mapValue.get(LTE_FIELD.getPreferredName()));
+            builder.endObject();
+            XContentParser parser =
+                org.opensearch.common.xcontent.json.JsonXContent.jsonXContent.createParser(
+                    org.opensearch.common.xcontent.NamedXContentRegistry.EMPTY,
+                    org.opensearch.common.xcontent.DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                    org.opensearch.common.bytes.BytesReference.bytes(builder).utf8ToString());
+
+
+            final XContentParser.Token start = parser.nextToken();
+            if (start == XContentParser.Token.START_OBJECT) {
+                RangeFieldType fieldType = fieldType();
+                RangeType rangeType = fieldType.rangeType;
+                String fieldName = null;
+                Object from = rangeType.minValue();
+                Object to = rangeType.maxValue();
+                boolean includeFrom = DEFAULT_INCLUDE_LOWER;
+                boolean includeTo = DEFAULT_INCLUDE_UPPER;
+                XContentParser.Token token;
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                    if (token == XContentParser.Token.FIELD_NAME) {
+                        fieldName = parser.currentName();
+                    } else {
+                        if (fieldName.equals(GT_FIELD.getPreferredName())) {
+                            includeFrom = false;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                from = rangeType.parseFrom(fieldType, parser, coerce(), includeFrom);
+                            }
+                        } else if (fieldName.equals(GTE_FIELD.getPreferredName())) {
+                            includeFrom = true;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                from = rangeType.parseFrom(fieldType, parser, coerce(), includeFrom);
+                            }
+                        } else if (fieldName.equals(LT_FIELD.getPreferredName())) {
+                            includeTo = false;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                to = rangeType.parseTo(fieldType, parser, coerce(), includeTo);
+                            }
+                        } else if (fieldName.equals(LTE_FIELD.getPreferredName())) {
+                            includeTo = true;
+                            if (parser.currentToken() != XContentParser.Token.VALUE_NULL) {
+                                to = rangeType.parseTo(fieldType, parser, coerce(), includeTo);
+                            }
+                        } else {
+                            throw new MapperParsingException("error parsing field [" +
+                                name() + "], with unknown parameter [" + fieldName + "]");
+                        }
+                    }
+                }
+                return new Range(rangeType, from, to, includeFrom, includeTo);
+            }
+        }
+        throw new MapperParsingException("error parsing field ["
+                + name() + "], expected an object but got " + value.toString());
     }
 
     private static Range parseIpRangeFromCidr(final XContentParser parser) throws IOException {
@@ -563,6 +652,14 @@ public class RangeFieldMapper extends ParametrizedFieldMapper {
         public Object getTo() {
             return to;
         }
+
+        public boolean isIncludeFrom() {
+            return includeFrom;
+        }
+
+        public boolean isIncludeTo() {
+            return includeTo;
+        }
     }
 
     static class BinaryRangesDocValuesField extends CustomDocValuesField {
@@ -589,5 +686,10 @@ public class RangeFieldMapper extends ParametrizedFieldMapper {
                 throw new OpenSearchException("failed to encode ranges", e);
             }
         }
+    }
+
+    /** Elassandra CQL UDT field layout for range types (fork parity; side-car stub). */
+    public java.util.Map<String, org.apache.cassandra.cql3.CQL3Type.Raw> cqlFieldTypes() {
+        return java.util.Collections.emptyMap();
     }
 }

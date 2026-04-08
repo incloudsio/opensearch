@@ -28,6 +28,10 @@ nbactions.xml
 .gradle/
 build/
 
+# Local bootstrap / backup artifacts (not part of upstream)
+buildSrc/build-bootstrap/
+gradle/*.bak
+
 # vscode stuff
 .vscode/
 

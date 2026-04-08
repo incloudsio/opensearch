@@ -161,7 +161,8 @@ public class ShardRoutingTests extends OpenSearchTestCase {
                         otherRouting.recoverySource(),
                         otherRouting.unassignedInfo(),
                         otherRouting.allocationId(),
-                        otherRouting.getExpectedShardSize()
+                        otherRouting.getExpectedShardSize(),
+                        null
                     );
                     break;
                 case 1:
@@ -175,7 +176,8 @@ public class ShardRoutingTests extends OpenSearchTestCase {
                         otherRouting.recoverySource(),
                         otherRouting.unassignedInfo(),
                         otherRouting.allocationId(),
-                        otherRouting.getExpectedShardSize()
+                        otherRouting.getExpectedShardSize(),
+                        null
                     );
                     break;
                 case 2:
@@ -192,7 +194,8 @@ public class ShardRoutingTests extends OpenSearchTestCase {
                             otherRouting.recoverySource(),
                             otherRouting.unassignedInfo(),
                             otherRouting.allocationId(),
-                            otherRouting.getExpectedShardSize()
+                            otherRouting.getExpectedShardSize(),
+                            null
                         );
                     }
                     break;
@@ -210,7 +213,8 @@ public class ShardRoutingTests extends OpenSearchTestCase {
                             otherRouting.recoverySource(),
                             otherRouting.unassignedInfo(),
                             otherRouting.allocationId(),
-                            otherRouting.getExpectedShardSize()
+                            otherRouting.getExpectedShardSize(),
+                            null
                         );
                     }
                     break;
@@ -233,7 +237,8 @@ public class ShardRoutingTests extends OpenSearchTestCase {
                             ),
                             otherRouting.unassignedInfo(),
                             otherRouting.allocationId(),
-                            otherRouting.getExpectedShardSize()
+                            otherRouting.getExpectedShardSize(),
+                            null
                         );
                     }
                     break;

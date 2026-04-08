@@ -57,10 +57,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.StreamSupport;
 
-public abstract class FieldMapper extends Mapper implements Cloneable {
+public abstract class FieldMapper extends Mapper implements Cloneable, CqlMapper {
     public static final Setting<Boolean> IGNORE_MALFORMED_SETTING = Setting.boolSetting(
         "index.mapping.ignore_malformed",
         false,
@@ -305,6 +306,20 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
                 context.doc().add(new Field(FieldNamesFieldMapper.NAME, fieldName, FieldNamesFieldMapper.Defaults.FIELD_TYPE));
             }
         }
+    }
+
+    /**
+     * Elassandra: createField for secondary index / CQL document materialization (fork parity).
+     */
+    public final void createField(ParseContext context, Object value) throws IOException {
+        createField(context, value, Optional.empty());
+    }
+
+    /**
+     * Elassandra: createField for secondary index / CQL document materialization (fork parity).
+     */
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        multiFields.create(this, context, value);
     }
 
     @Override
@@ -639,6 +654,19 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
             context.path().remove();
         }
 
+        /** Elassandra: propagate createField to multi-fields (fork parity). */
+        public void create(FieldMapper mainField, ParseContext context, Object val) throws IOException {
+            if (mappers.isEmpty()) {
+                return;
+            }
+            context = context.createMultiFieldContext();
+            context.path().add(mainField.simpleName());
+            for (ObjectCursor<FieldMapper> cursor : mappers.values()) {
+                cursor.value.createField(context, val, Optional.empty());
+            }
+            context.path().remove();
+        }
+
         public MultiFields merge(MultiFields mergeWith) {
             ImmutableOpenMap.Builder<String, FieldMapper> newMappersBuilder = ImmutableOpenMap.builder(mappers);
 
@@ -734,6 +762,11 @@ public abstract class FieldMapper extends Mapper implements Cloneable {
         public List<String> copyToFields() {
             return copyToFields;
         }
+    }
+
+    /** Elassandra CQL column type for leaf fields (fork parity; side-car stub). */
+    public org.apache.cassandra.cql3.CQL3Type.Raw rawType() {
+        return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.TEXT);
     }
 
 }

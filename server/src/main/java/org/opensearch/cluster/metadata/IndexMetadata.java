@@ -656,6 +656,57 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
         return settings;
     }
 
+    // --- Elassandra CQL / index settings (fork parity; side-car compile stubs) ---
+
+    private static final java.util.regex.Pattern ELASSANDRA_INDEX_TO_KS = java.util.regex.Pattern.compile("\\.|\\-");
+
+    public static final String SETTING_KEYSPACE = "index.keyspace";
+    public static final String SETTING_TABLE = "index.table";
+    public static final String SETTING_TABLE_OPTIONS = "index.table_options";
+    public static final String SETTING_INDEX_OPAQUE_STORAGE = "index.opaque_storage";
+    public static final String SETTING_VIRTUAL = "index.virtual";
+
+    /** Cassandra keyspace for this index. */
+    public String keyspace() {
+        String ks = settings.get(SETTING_KEYSPACE);
+        if (ks != null && ks.isEmpty() == false) {
+            return ks;
+        }
+        return ELASSANDRA_INDEX_TO_KS.matcher(index.getName()).replaceAll("_");
+    }
+
+    public String table() {
+        return settings.get(SETTING_TABLE, org.opensearch.index.mapper.MapperService.SINGLE_MAPPING_NAME);
+    }
+
+    public String tableOptions() {
+        return settings.get(SETTING_TABLE_OPTIONS);
+    }
+
+    public boolean isOpaqueStorage() {
+        return settings.getAsBoolean(SETTING_INDEX_OPAQUE_STORAGE, false);
+    }
+
+    public boolean isVirtual() {
+        return settings.getAsBoolean(SETTING_VIRTUAL, false);
+    }
+
+    public String[] partitionFunction() {
+        return null;
+    }
+
+    public org.elassandra.index.PartitionFunction partitionFunctionClass() {
+        return new org.elassandra.index.MessageFormatPartitionFunction();
+    }
+
+    /**
+     * Mapping for a legacy type name (Elassandra multi-type / CQL paths).
+     */
+    @Nullable
+    public MappingMetadata mapping(String mappingType) {
+        return mappings.get(mappingType);
+    }
+
     public ImmutableOpenMap<String, AliasMetadata> getAliases() {
         return this.aliases;
     }

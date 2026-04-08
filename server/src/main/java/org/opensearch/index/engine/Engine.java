@@ -375,6 +375,12 @@ public abstract class Engine implements Closeable {
      */
     public abstract DeleteResult delete(Delete delete) throws IOException;
 
+    /** Elassandra: retained for secondary-index truncation paths. */
+    @Deprecated
+    public void delete(org.opensearch.index.engine.DeleteByQuery delete) throws EngineException {
+        // no-op in stock engine; forked InternalEngine may override
+    }
+
     public abstract NoOpResult noOp(NoOp noOp) throws IOException;
 
     /**

@@ -39,6 +39,10 @@ import org.opensearch.common.bytes.BytesArray;
 import org.opensearch.common.bytes.BytesReference;
 import org.opensearch.common.xcontent.XContentType;
 
+/**
+ * Parsed source to index. Elassandra extends stock OpenSearch with mutable {@link #routing(String)}
+ * and {@link #token(Long)} for CQL / opaque_storage indexing (fork parity).
+ */
 public class SourceToParse {
 
     private final BytesReference source;
@@ -49,7 +53,13 @@ public class SourceToParse {
 
     private final String id;
 
-    private final @Nullable String routing;
+    /** Mutable: Elassandra sets after {@link #source} factory (opaque_storage path). */
+    private String routing;
+
+    private String parentId;
+
+    /** Cassandra partition token for _token; null when not supplied. */
+    private @Nullable Long token;
 
     private final XContentType xContentType;
 
@@ -66,6 +76,10 @@ public class SourceToParse {
 
     public SourceToParse(String index, String type, String id, BytesReference source, XContentType xContentType) {
         this(index, type, id, source, xContentType, null);
+    }
+
+    public static SourceToParse source(String index, String type, String id, BytesReference source, XContentType contentType) {
+        return new SourceToParse(index, type, id, source, contentType);
     }
 
     public BytesReference source() {
@@ -86,6 +100,30 @@ public class SourceToParse {
 
     public @Nullable String routing() {
         return this.routing;
+    }
+
+    public SourceToParse routing(String routing) {
+        this.routing = routing;
+        return this;
+    }
+
+    public String parent() {
+        return this.parentId;
+    }
+
+    public SourceToParse parent(String parentId) {
+        this.parentId = parentId;
+        return this;
+    }
+
+    /** Cassandra partition token for _token metadata (Elassandra). */
+    public Long token() {
+        return this.token;
+    }
+
+    public SourceToParse token(Long token) {
+        this.token = token;
+        return this;
     }
 
     public XContentType getXContentType() {

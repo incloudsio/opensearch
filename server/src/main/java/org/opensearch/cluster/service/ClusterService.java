@@ -66,6 +66,11 @@ public class ClusterService extends AbstractLifecycleComponent {
         (key) -> Setting.simpleString(key, Property.Dynamic, Property.NodeScope)
     );
 
+    /** Elassandra: secondary index class setting key (fork parity; side-car stub). */
+    public static final String SETTING_CLUSTER_SECONDARY_INDEX_CLASS = "cluster.secondary_index_class";
+
+    public static final Class<?> defaultSecondaryIndexClass = org.elassandra.index.ExtendedElasticSecondaryIndex.class;
+
     /**
      * The node's settings.
      */
@@ -330,4 +335,89 @@ public class ClusterService extends AbstractLifecycleComponent {
     ) {
         masterService.submitStateUpdateTasks(source, tasks, config, executor);
     }
+
+    // --- Elassandra side-car compile stubs (no runtime behaviour; full port replaces these) ---
+
+    public String getExtensionKey(org.opensearch.cluster.metadata.IndexMetadata indexMetaData) {
+        return indexMetaData.getIndex().getName();
+    }
+
+    public void putIndexMetaDataExtension(
+        org.opensearch.cluster.metadata.IndexMetadata indexMetaData,
+        java.util.Map<String, java.nio.ByteBuffer> extensions
+    ) {
+    }
+
+    public void setDiscovery(org.opensearch.discovery.Discovery discovery) {
+    }
+
+    public org.opensearch.indices.IndicesService getIndicesService() {
+        return null;
+    }
+
+    public org.opensearch.index.IndexService indexServiceSafe(org.opensearch.index.Index index) {
+        return null;
+    }
+
+    public org.elassandra.cluster.SchemaManager getSchemaManager() {
+        return null;
+    }
+
+    public void writeMetadataToSchemaMutations(
+        org.opensearch.cluster.metadata.Metadata metadata,
+        java.util.Collection<org.apache.cassandra.db.Mutation> mutations,
+        java.util.Collection<org.apache.cassandra.transport.Event.SchemaChange> events
+    ) throws org.apache.cassandra.exceptions.ConfigurationException, java.io.IOException {
+    }
+
+    public void commitMetaData(
+        org.opensearch.cluster.metadata.Metadata oldMetaData,
+        org.opensearch.cluster.metadata.Metadata newMetaData,
+        String source
+    ) throws org.elassandra.ConcurrentMetaDataUpdateException, org.apache.cassandra.exceptions.UnavailableException, java.io.IOException {
+    }
+
+    public java.util.UUID readMetaDataOwner(long version) {
+        return null;
+    }
+
+    private static final java.util.regex.Pattern INDEX_TO_NAME_PATTERN = java.util.regex.Pattern.compile("\\.|\\-");
+
+    public static String indexToKsName(String index) {
+        return INDEX_TO_NAME_PATTERN.matcher(index).replaceAll("_");
+    }
+
+    /** Elassandra replication factor helper (CQL keyspace name). */
+    public static int replicationFactor(String keyspace) {
+        return 1;
+    }
+
+    public static final String SETTING_SYSTEM_SYNCHRONOUS_REFRESH = "es.synchronous_refresh";
+    public static final String SYNCHRONOUS_REFRESH = "synchronous_refresh";
+    public static final String SNAPSHOT_WITH_SSTABLE = "snapshot_with_sstable";
+    public static final String INCLUDE_HOST_ID = "include_node_id";
+    public static final String INDEX_ON_COMPACTION = "index_on_compaction";
+    public static final String INDEX_STATIC_COLUMNS = "index_static_columns";
+    public static final String INDEX_STATIC_ONLY = "index_static_only";
+    public static final String INDEX_STATIC_DOCUMENT = "index_static_document";
+    public static final String INDEX_INSERT_ONLY = "index_insert_only";
+    public static final String INDEX_OPAQUE_STORAGE = "index_opaque_storage";
+    public static final String SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE = "es.snapshot_with_sstable";
+    public static final String SETTING_SYSTEM_INDEX_ON_COMPACTION = "es.index_on_compaction";
+    public static final String SETTING_SYSTEM_INDEX_INSERT_ONLY = "es.index_insert_only";
+    public static final String SETTING_SYSTEM_INDEX_OPAQUE_STORAGE = "es.index_opaque_storage";
+
+    /**
+     * Elassandra: CQL process (fork parity). Delegates to Cassandra {@code QueryProcessor} for side-car compile.
+     */
+    public org.apache.cassandra.cql3.UntypedResultSet process(
+        org.apache.cassandra.db.ConsistencyLevel cl,
+        String query,
+        Object... values
+    ) throws org.apache.cassandra.exceptions.RequestExecutionException,
+             org.apache.cassandra.exceptions.RequestValidationException,
+             org.apache.cassandra.exceptions.InvalidRequestException {
+        return org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal(query, values);
+    }
+
 }

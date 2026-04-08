@@ -432,6 +432,18 @@ public class DiscoveryNode implements Writeable, ToXContentFragment {
     }
 
     /**
+     * Elassandra: UUID for Cassandra token metadata / routing (fork parity). OpenSearch node ids are opaque strings;
+     * this derives a stable UUID from {@link #getId()} for compile-time compatibility.
+     */
+    public java.util.UUID uuid() {
+        try {
+            return java.util.UUID.fromString(getId());
+        } catch (IllegalArgumentException e) {
+            return java.util.UUID.nameUUIDFromBytes(getId().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
      * The name of the node.
      */
     public String getName() {

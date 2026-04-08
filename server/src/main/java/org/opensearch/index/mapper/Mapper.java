@@ -48,7 +48,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
+public abstract class Mapper implements ToXContentFragment, Iterable<Mapper>, CqlMapper {
 
     public static class BuilderContext {
         private final Settings indexSettings;
@@ -257,5 +257,18 @@ public abstract class Mapper implements ToXContentFragment, Iterable<Mapper> {
      */
     protected static boolean hasIndexCreated(Settings settings) {
         return settings.hasValue(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey());
+    }
+
+    /**
+     * Elassandra: whether this mapper contributes a mapped field (fork parity).
+     */
+    public boolean hasField() {
+        return true;
+    }
+
+    /** Elassandra: Cassandra column name bytes (fork parity). */
+    @Override
+    public java.nio.ByteBuffer cqlName() {
+        return org.apache.cassandra.utils.ByteBufferUtil.bytes(simpleName());
     }
 }

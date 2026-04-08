@@ -58,7 +58,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class ObjectMapper extends Mapper implements Cloneable {
+public class ObjectMapper extends Mapper implements Cloneable, CqlMapper {
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(ObjectMapper.class);
 
     public static final String CONTENT_TYPE = "object";
