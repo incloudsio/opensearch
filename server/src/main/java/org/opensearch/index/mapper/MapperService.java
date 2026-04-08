@@ -627,6 +627,11 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
      * {@value #DEFAULT_MAPPING} type, you can get a {@link DocumentMapper} for
      * the default mapping.
      */
+    /** Elassandra: whether a {@link DocumentMapper} exists for the given type name. */
+    public boolean hasMapping(String type) {
+        return documentMapper(type) != null;
+    }
+
     public DocumentMapper documentMapper(String type) {
         if (mapper != null && type.equals(mapper.type())) {
             return mapper;

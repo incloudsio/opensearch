@@ -60,6 +60,13 @@ public final class Uid {
         return id;
     }
 
+    /**
+     * Legacy composite {@code type#id} string used for {@code _uid} storage (Elassandra secondary index).
+     */
+    public static String createUid(String type, String id) {
+        return type + DELIMITER + id;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

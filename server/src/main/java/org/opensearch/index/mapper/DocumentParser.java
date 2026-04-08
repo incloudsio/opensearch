@@ -58,7 +58,7 @@ import java.util.Objects;
 import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
 
 /** A parser for documents, given mappings from a DocumentMapper */
-final class DocumentParser {
+public final class DocumentParser {
 
     private final IndexSettings indexSettings;
     private final DocumentMapperParser docMapperParser;
@@ -471,7 +471,7 @@ final class DocumentParser {
         }
     }
 
-    private static void nested(ParseContext context, ObjectMapper.Nested nested) {
+    public static void nested(ParseContext context, ObjectMapper.Nested nested) {
         ParseContext.Document nestedDoc = context.doc();
         ParseContext.Document parentDoc = nestedDoc.getParent();
         if (nested.isIncludeInParent()) {
@@ -494,7 +494,7 @@ final class DocumentParser {
         }
     }
 
-    private static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
+    public static ParseContext nestedContext(ParseContext context, ObjectMapper mapper) {
         context = context.createNestedContext(mapper.fullPath());
         ParseContext.Document nestedDoc = context.doc();
         ParseContext.Document parentDoc = nestedDoc.getParent();
@@ -896,6 +896,41 @@ final class DocumentParser {
         }
     }
 
+    /**
+     * Elassandra: materialize {@code copy_to} targets with an explicit value (secondary index path).
+     */
+    public static void createCopyFields(ParseContext context, List<String> copyToFields, Object value) throws IOException {
+        if (!context.isWithinCopyTo() && copyToFields.isEmpty() == false) {
+            context = context.createCopyToContext();
+            for (String field : copyToFields) {
+                ParseContext.Document targetDoc = null;
+                for (ParseContext.Document doc = context.doc(); doc != null; doc = doc.getParent()) {
+                    if (field.startsWith(doc.getPrefix())) {
+                        targetDoc = doc;
+                        break;
+                    }
+                }
+                assert targetDoc != null;
+                final ParseContext copyToContext;
+                if (targetDoc == context.doc()) {
+                    copyToContext = context;
+                } else {
+                    copyToContext = context.switchDoc(targetDoc);
+                }
+                createCopy(field, copyToContext, value);
+            }
+        }
+    }
+
+    private static void createCopy(String field, ParseContext context, Object value) throws IOException {
+        Mapper mapper = context.docMapper().mappers().getMapper(field);
+        if (mapper != null && mapper instanceof FieldMapper) {
+            ((FieldMapper) mapper).createField(context, value);
+        } else {
+            throw new IOException("CopyTo field " + field + " mapper not found");
+        }
+    }
+
     private static Tuple<Integer, ObjectMapper> getDynamicParentMapper(
         ParseContext context,
         final String[] paths,
@@ -957,7 +992,7 @@ final class DocumentParser {
     }
 
     // find what the dynamic setting is given the current parse context and parent
-    private static ObjectMapper.Dynamic dynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
+    public static ObjectMapper.Dynamic dynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
         ObjectMapper.Dynamic dynamic = parentMapper.dynamic();
         while (dynamic == null) {
             int lastDotNdx = parentMapper.name().lastIndexOf('.');

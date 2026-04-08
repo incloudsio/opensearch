@@ -96,6 +96,11 @@ public final class Mapping implements ToXContentFragment {
         return root;
     }
 
+    /** All metadata field mappers (iteration order matches mapping merge). */
+    public MetadataFieldMapper[] metadataMappers() {
+        return metadataMappers;
+    }
+
     public void validate(MappingLookup mappers) {
         for (MetadataFieldMapper metadataFieldMapper : metadataMappers) {
             metadataFieldMapper.validate(mappers);

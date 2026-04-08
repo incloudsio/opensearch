@@ -19,7 +19,6 @@
 
 package org.elassandra.env;
 
-import org.opensearch.cli.Terminal;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.env.Environment;
 import org.opensearch.node.InternalSettingsPreparer;
@@ -34,13 +33,11 @@ public interface EnvironmentLoader {
 
     default Environment loadEnvironment(boolean foreground, String homeDir, String configDir) {
         return InternalSettingsPreparer.prepareEnvironment(
-            Settings.builder()
-                .put("node.name","node0")
-                .put("path.home", homeDir)
-                .build(),
-            foreground ? Terminal.DEFAULT : null,
-            Collections.EMPTY_MAP,
-            Paths.get(configDir));
+            Settings.builder().put("node.name", "node0").put("path.home", homeDir).build(),
+            Collections.emptyMap(),
+            Paths.get(configDir),
+            () -> "node0"
+        );
     }
 
 }

@@ -9,6 +9,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
@@ -17,7 +18,6 @@ import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.index.mapper.NumberFieldMapper;
 
 import java.util.Collection;
 import java.util.Queue;
@@ -74,7 +74,7 @@ public class TokenRangesService {
 
                     if (unique_range.left.equals(unique_range.right)) {
                         // partition key search, not cached.
-                        return NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,unique_range.left);
+                        return LongPoint.newExactQuery(TokenFieldMapper.NAME, (Long) unique_range.left.getTokenValue());
                     }
                     tokenRangesQuery = tokenRangesQueryCache.getIfPresent(tokenRanges);
                     if (tokenRangesQuery == null) {
@@ -108,14 +108,12 @@ public class TokenRangesService {
     }
 
     Query newNumericRangesQuery(Range<Token> range) {
-        Long left =  (Long) range.left.getTokenValue();
+        Long left = (Long) range.left.getTokenValue();
         Long right = (Long) range.right.getTokenValue();
-        return (left.equals(right)) ?
-            NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,left) :
-            NumberFieldMapper.NumberType.LONG.rangeQuery(TokenFieldMapper.NAME,
-                left == Long.MIN_VALUE ? null : left,
-                right == Long.MAX_VALUE ? null : right,
-                false, true, true);
+        if (left.equals(right)) {
+            return LongPoint.newExactQuery(TokenFieldMapper.NAME, left);
+        }
+        return LongPoint.newRangeQuery(TokenFieldMapper.NAME, left, right);
     }
 
     public static boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Range<Token> requestTokenRange) {

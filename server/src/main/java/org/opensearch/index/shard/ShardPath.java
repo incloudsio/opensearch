@@ -53,6 +53,8 @@ import java.util.Objects;
 public final class ShardPath {
     public static final String INDEX_FOLDER_NAME = "index";
     public static final String TRANSLOG_FOLDER_NAME = "translog";
+    /** Elassandra: Lucene snapshot hard-link directory under the node path (fork parity). */
+    public static final String SNAPSHOT_FOLDER_NAME = "snapshots";
 
     private final Path path;
     private final ShardId shardId;
@@ -83,6 +85,13 @@ public final class ShardPath {
 
     public Path resolveIndex() {
         return path.resolve(INDEX_FOLDER_NAME);
+    }
+
+    /**
+     * Default snapshot path = {@code .../nodes/&lt;n&gt;/snapshots} (Elassandra fork parity).
+     */
+    public Path resolveSnapshot() {
+        return path.getParent().getParent().resolveSibling(SNAPSHOT_FOLDER_NAME);
     }
 
     public Path getDataPath() {

@@ -6,6 +6,7 @@ package org.elassandra.index;
 
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.lucene.search.Query;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.index.IndexService;
@@ -271,7 +272,7 @@ public final class ElassandraSecondaryIndexCompat {
             Object vCreated = settings.getIndexVersionCreated();
             return (Boolean) vCreated.getClass().getMethod("onOrAfter", legacy).invoke(vCreated, v65);
         } catch (Exception e) {
-            return settings.getIndexVersionCreated().onOrAfter(Version.V_6_5_0);
+            return settings.getIndexVersionCreated().onOrAfter(LegacyESVersion.V_6_5_0);
         }
     }
 }

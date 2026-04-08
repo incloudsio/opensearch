@@ -96,6 +96,7 @@ import org.apache.lucene.search.IndexOrDocValuesQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
@@ -108,6 +109,7 @@ import org.elassandra.cluster.SchemaManager;
 import org.elassandra.cluster.Serializer;
 import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
 import org.opensearch.OpenSearchException;
+import org.opensearch.LegacyESVersion;
 import org.opensearch.Version;
 import org.opensearch.action.admin.indices.flush.FlushRequest;
 import org.opensearch.cluster.ClusterChangedEvent;
@@ -387,14 +389,14 @@ public class ElasticSecondaryIndex implements Index {
             geoPointFieldMapper.parse(context.createExternalValueContext(geoPoint));
         } else if (mapper instanceof FieldMapper) {
             ElassandraSecondaryIndexCompat.fieldMapperCreate((FieldMapper) mapper, context, value, keyName);
-            DocumentParserCompat.createCopyFields(context, ((FieldMapper) mapper).copyTo().copyToFields(), value);
+            DocumentParser.createCopyFields(context, ((FieldMapper) mapper).copyTo().copyToFields(), value);
         } else if (mapper instanceof ObjectMapper) {
             final ObjectMapper objectMapper = (ObjectMapper) mapper;
             final ObjectMapper.Nested nested = objectMapper.nested();
             // see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
             // code from DocumentParser.parseObject()
             if (nested.isNested()) {
-                context = DocumentParserCompat.nestedContext(context, objectMapper);
+                context = DocumentParser.nestedContext(context, objectMapper);
             }
 
             //ContentPath.Type origPathType = path().pathType();
@@ -426,7 +428,7 @@ public class ElasticSecondaryIndex implements Index {
                             CollectionType ctype = (CollectionType) cd.type;
                             if (ctype.kind == CollectionType.Kind.MAP &&
                                 ((MapType) ctype).getKeysType().asCQL3Type().toString().equals("text") &&
-                                (DocumentParserCompat.dynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
+                                (DocumentParser.dynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
                                 logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                                 // upgrade to write lock
                                 indexInfo.dynamicMappingUpdateLock.readLock().unlock();
@@ -520,7 +522,7 @@ public class ElasticSecondaryIndex implements Index {
 
             // restore the enable path flag
             if (nested.isNested()) {
-                DocumentParserCompat.nested(context, nested);
+                DocumentParser.nested(context, nested);
             }
         }
     }
@@ -1500,7 +1502,9 @@ public class ElasticSecondaryIndex implements Index {
                         final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
                         final IndexSearcher searcher = new IndexSearcher(topLevelContext);
                         searcher.setQueryCache(null);
-                        final Weight weight = searcher.createNormalizedWeight(new MatchAllDocsQuery(), false);
+                        Query mq = new MatchAllDocsQuery();
+                        mq = searcher.rewrite(mq);
+                        final Weight weight = searcher.createWeight(mq, ScoreMode.COMPLETE_NO_SCORES, 1.0f);
                         Scorer s = weight.scorer(context);
                         return (s == null) ? null : org.apache.lucene.util.BitSet.of(s.iterator(), context.reader().maxDoc());
                     }
@@ -2025,9 +2029,9 @@ public class ElasticSecondaryIndex implements Index {
 
             public Term termUid(IndexService indexService, String id) {
                 Term termUid;
-                if (indexService.getIndexSettings().getIndexVersionCreated().onOrAfter(Version.V_6_0_0_beta1)) {
+                if (indexService.getIndexSettings().getIndexVersionCreated().onOrAfter(LegacyESVersion.V_6_0_0_beta1)) {
                     termUid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
-                } else if (indexService.mapperService().documentMapper(typeName).idFieldMapper().fieldType().indexOptions() != IndexOptions.NONE) {
+                } else if (indexService.mapperService().documentMapper(typeName).idFieldMapper().fieldType().isSearchable()) {
                     termUid = new Term(IdFieldMapper.NAME, id);
                 } else {
                     termUid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
@@ -2306,7 +2310,6 @@ public class ElasticSecondaryIndex implements Index {
                                     (isStatic()) ? partitionKey : id,
                                     context.type(),
                                     partitionKey,
-                                    ((Long) key.getToken().getTokenValue()).longValue(),
                                     context.docs(),
                                     context.source(), // source
                                     XContentType.JSON,

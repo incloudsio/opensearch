@@ -29,14 +29,12 @@ import org.opensearch.cluster.routing.allocation.AllocationService;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.discovery.Discovery;
 import org.opensearch.gateway.Gateway;
-import org.opensearch.gateway.GatewayMetaState;
 import org.opensearch.gateway.GatewayService;
 import org.opensearch.gateway.TransportNodesListGatewayMetaState;
-import org.opensearch.indices.IndicesService;
 import org.opensearch.rest.RestStatus;
 import org.opensearch.threadpool.ThreadPool;
-import java.io.IOException;
 
 import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,14 +49,15 @@ public class CassandraGatewayService extends GatewayService {
     private final AtomicBoolean recovered = new AtomicBoolean();
 
     @Inject
-    public CassandraGatewayService(Settings settings,
-            AllocationService allocationService,
-            ClusterService clusterService,
-            ThreadPool threadPool,
-            GatewayMetaState metaState,
-            TransportNodesListGatewayMetaState listGatewayMetaState,
-            IndicesService indicesService) {
-        super(settings, allocationService, clusterService, threadPool, metaState, listGatewayMetaState, indicesService);
+    public CassandraGatewayService(
+        Settings settings,
+        AllocationService allocationService,
+        ClusterService clusterService,
+        ThreadPool threadPool,
+        TransportNodesListGatewayMetaState listGatewayMetaState,
+        Discovery discovery
+    ) {
+        super(settings, allocationService, clusterService, threadPool, listGatewayMetaState, discovery);
         this.clusterService = clusterService;
     }
 
@@ -93,17 +92,11 @@ public class CassandraGatewayService extends GatewayService {
                 logger.info("cassandra ring block released");
                 try {
                     clusterService.publishX1();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     logger.error("unexpected failure on X1 publishing during [{}]", source, e);
                 }
             }
         });
-    }
-
-    @Override
-    protected void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
-        final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
-        gateway().performStateRecovery(recoveryListener);
     }
 
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {

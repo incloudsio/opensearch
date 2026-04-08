@@ -70,6 +70,7 @@ import org.opensearch.tasks.TaskId;
 import org.opensearch.transport.TransportRequest;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -585,5 +586,17 @@ public class ShardSearchRequest extends TransportRequest implements IndicesReque
             }
             return combined;
         }
+    }
+
+    /** Elassandra: optional Cassandra token ranges for shard-level filtering (side-car; default null). */
+    @Nullable
+    public Collection<org.apache.cassandra.dht.Range<org.apache.cassandra.dht.Token>> tokenRanges() {
+        return null;
+    }
+
+    /** Elassandra: whether to cache token-range bitsets (side-car; default null). */
+    @Nullable
+    public Boolean tokenRangesBitsetCache() {
+        return null;
     }
 }

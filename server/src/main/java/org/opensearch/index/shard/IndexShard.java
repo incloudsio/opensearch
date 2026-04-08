@@ -953,7 +953,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         );
     }
 
-    private Engine.IndexResult index(Engine engine, Engine.Index index) throws IOException {
+    /** Elassandra: exposed for secondary index pipeline (fork parity). */
+    public Engine.IndexResult index(Engine engine, Engine.Index index) throws IOException {
         active.set(true);
         final Engine.IndexResult result;
         index = indexingOperationListeners.preIndex(shardId, index);
@@ -1173,7 +1174,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         );
     }
 
-    private Engine.DeleteResult delete(Engine engine, Engine.Delete delete) throws IOException {
+    /** Elassandra: exposed for secondary index pipeline (fork parity). */
+    public Engine.DeleteResult delete(Engine engine, Engine.Delete delete) throws IOException {
         active.set(true);
         final Engine.DeleteResult result;
         delete = indexingOperationListeners.preDelete(shardId, delete);
@@ -2934,7 +2936,8 @@ public class IndexShard extends AbstractIndexShardComponent implements IndicesCl
         recoveryState.getVerifyIndex().checkIndexTime(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - timeNS)));
     }
 
-    Engine getEngine() {
+    /** Elassandra: exposed for {@link org.elassandra.index.ElasticSecondaryIndex} (fork parity). */
+    public Engine getEngine() {
         Engine engine = getEngineOrNull();
         if (engine == null) {
             throw new AlreadyClosedException("engine is closed");

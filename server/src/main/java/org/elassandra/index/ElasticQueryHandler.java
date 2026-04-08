@@ -63,7 +63,9 @@ import org.opensearch.common.bytes.BytesReference;
 import org.opensearch.common.logging.Loggers;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.ThreadContext;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.xcontent.DeprecationHandler;
+import org.opensearch.common.xcontent.NamedXContentRegistry;
 import org.opensearch.common.xcontent.ToXContent;
 import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentParser;
@@ -203,7 +205,11 @@ public class ElasticQueryHandler extends QueryProcessor {
             if (scrollId == null) {
                 SearchSourceBuilder ssb = null;
                 try {
-                    XContentParser parser = JsonXContent.jsonXContent.createParser(ElassandraDaemon.instance.node().getNamedXContentRegistry(), DeprecationHandler.THROW_UNSUPPORTED_OPERATION, query);
+                    XContentParser parser = JsonXContent.jsonXContent.createParser(
+                        NamedXContentRegistry.EMPTY,
+                        DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                        query
+                    );
                     ssb = SearchSourceBuilder.fromXContent(parser);
                 } catch (ParsingException e) {
                     throw new SyntaxException(e.getMessage());
@@ -221,7 +227,7 @@ public class ElasticQueryHandler extends QueryProcessor {
                     // undefined bound is set to minimum.
                     if (!left.isMinimum() || !right.isMinimum()) {
                         Range range = (!left.isMinimum() && right.isMinimum()) ? new Range(left, AbstractSearchStrategy.TOKEN_MAX) : new Range(left, right);
-                        srb.setTokenRanges(Collections.singletonList(range));
+                        // OpenSearch 1.x SearchRequestBuilder has no setTokenRanges; token routing is applied via strategy/router elsewhere.
                         if (logger.isDebugEnabled())
                             logger.debug("tokenRanges={}", range);
                     }
@@ -261,16 +267,13 @@ public class ElasticQueryHandler extends QueryProcessor {
                     }
                 }
                 handle(queryState, client);
-                if (extraParams != null)
-                    srb.setExtraParams(extraParams);
+                // extraParams (CQL projection, trace) — wire through thread context; OpenSearch 1.x has no setExtraParams on SearchRequestBuilder.
                 resp = srb.get();
                 scrollId = resp.getScrollId();
             } else {
                 SearchScrollRequestBuilder ssrb = client.prepareSearchScroll(scrollId);
                 ssrb.setScroll("1m"); // timeout for the next scroll fetch
                 handle(queryState, client);
-                if (extraParams != null)
-                    ssrb.setExtraParams(extraParams);
                 resp = ssrb.get();
                 scrollId = resp.getScrollId(); // only the most recently received _scroll_id should be used
             }
@@ -304,8 +307,14 @@ public class ElasticQueryHandler extends QueryProcessor {
                 if (logger.isDebugEnabled())
                     logger.debug("scrollId={} hits={}", scrollId, resp.getHits().getHits().length);
                 for (SearchHit hit : resp.getHits().getHits()) {
-                    if (hit.getValues() != null)
-                        rows.add(hit.getValues());
+                    if (hit.hasSource()) {
+                        BytesRef br = hit.getSourceRef().toBytesRef();
+                        rows.add(
+                            Collections.singletonList(
+                                ByteBuffer.wrap(Arrays.copyOfRange(br.bytes, br.offset, br.offset + br.length))
+                            )
+                        );
+                    }
                 }
                 resultMetadata = select.getResultMetadata().copy();
                 if (scrollId != null) {

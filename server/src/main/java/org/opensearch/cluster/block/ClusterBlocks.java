@@ -47,6 +47,7 @@ import org.opensearch.rest.RestStatus;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -157,6 +158,41 @@ public class ClusterBlocks extends AbstractDiffable<ClusterBlocks> {
 
     public boolean hasIndexBlock(String index, ClusterBlock block) {
         return indicesBlocks.containsKey(index) && indicesBlocks.get(index).contains(block);
+    }
+
+    /**
+     * Elassandra: compare global and per-index blocks for a set of index names (fork parity with ES 6.x).
+     */
+    public boolean isSame(ClusterBlocks that, List<String> indices) {
+        for (ClusterBlock block : this.global) {
+            if (!that.hasGlobalBlock(block)) {
+                return false;
+            }
+        }
+        for (ClusterBlock block : that.global) {
+            if (!hasGlobalBlock(block)) {
+                return false;
+            }
+        }
+        for (String index : indices) {
+            if (this.indicesBlocks.get(index) != null) {
+                for (ClusterBlock block : this.indicesBlocks.get(index)) {
+                    if (!that.hasIndexBlock(index, block)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        for (String index : indices) {
+            if (that.indicesBlocks.get(index) != null) {
+                for (ClusterBlock block : that.indicesBlocks.get(index)) {
+                    if (!this.hasIndexBlock(index, block)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     public boolean hasIndexBlockWithId(String index, int blockId) {

@@ -32,6 +32,8 @@
 
 package org.opensearch.cluster.service;
 
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateApplier;
@@ -54,6 +56,7 @@ import org.opensearch.node.Node;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 public class ClusterService extends AbstractLifecycleComponent {
@@ -381,6 +384,74 @@ public class ClusterService extends AbstractLifecycleComponent {
         return null;
     }
 
+    /** Elassandra admin keyspace name (CQL); side-car stub. */
+    public String getElasticAdminKeyspaceName() {
+        return "elastic_admin";
+    }
+
+    /** Elassandra admin metadata CQL table name (matches ES fork {@code ELASTIC_ADMIN_METADATA_TABLE}). */
+    public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata_log";
+
+    /**
+     * Merge per-table index metadata extensions into the cluster metadata builder (Elassandra fork parity).
+     */
+    public org.opensearch.cluster.metadata.Metadata.Builder mergeIndexMetaData(
+        org.opensearch.cluster.metadata.Metadata.Builder metaDataBuilder,
+        String indexName,
+        List<org.opensearch.cluster.metadata.IndexMetadata> mappings
+    ) {
+        if (mappings == null || mappings.isEmpty()) {
+            return metaDataBuilder;
+        }
+        org.opensearch.cluster.metadata.IndexMetadata base = metaDataBuilder.get(indexName);
+        org.opensearch.cluster.metadata.IndexMetadata.Builder indexBuilder = base != null
+            ? org.opensearch.cluster.metadata.IndexMetadata.builder(base)
+            : org.opensearch.cluster.metadata.IndexMetadata.builder(mappings.get(0));
+        int start = base == null ? 1 : 0;
+        for (int i = start; i < mappings.size(); i++) {
+            org.opensearch.cluster.metadata.IndexMetadata im = mappings.get(i);
+            for (ObjectObjectCursor<String, org.opensearch.cluster.metadata.MappingMetadata> c : im.getMappings()) {
+                indexBuilder.putMapping(c.value);
+            }
+        }
+        return metaDataBuilder.put(indexBuilder);
+    }
+
+    /** Apply CQL table extensions to metadata (fork parity; side-car no-op merge). */
+    public org.opensearch.cluster.metadata.Metadata.Builder mergeWithTableExtensions(
+        org.opensearch.cluster.metadata.Metadata.Builder metaDataBuilder
+    ) {
+        return metaDataBuilder;
+    }
+
+    /** Virtual index mapping overlay (fork parity; side-car passthrough). */
+    public org.opensearch.cluster.metadata.Metadata addVirtualIndexMappings(org.opensearch.cluster.metadata.Metadata metadata) {
+        return metadata;
+    }
+
+    /** Read persisted metadata from elastic_admin table (fork parity; side-car returns empty). */
+    public org.opensearch.cluster.metadata.Metadata readMetaData(org.apache.cassandra.schema.TableMetadata cfm) {
+        return org.opensearch.cluster.metadata.Metadata.EMPTY_METADATA;
+    }
+
+    /** Submit async shard/replica update after keyspace RF change (fork parity; side-car stub). */
+    public void submitNumberOfShardsAndReplicasUpdate(String source, String ksName) {}
+
+    /** CQL extension key naming {@code <elastic_admin_ks>(_<dc>)?/<index>}. */
+    public boolean isValidExtensionKey(String extensionName) {
+        return extensionName != null && extensionName.contains("/");
+    }
+
+    /** Deserialize index metadata from a table extension cell (fork parity; minimal stub). */
+    public org.opensearch.cluster.metadata.IndexMetadata getIndexMetaDataFromExtension(java.nio.ByteBuffer value) {
+        return org.opensearch.cluster.metadata.IndexMetadata.builder("__extension__").numberOfShards(1).numberOfReplicas(0).build();
+    }
+
+    /** Build secondary index name from a CQL table name (fork parity). */
+    public static String buildIndexName(String cfName) {
+        return "elastic_" + cfName;
+    }
+
     private static final java.util.regex.Pattern INDEX_TO_NAME_PATTERN = java.util.regex.Pattern.compile("\\.|\\-");
 
     public static String indexToKsName(String index) {
@@ -406,6 +477,7 @@ public class ClusterService extends AbstractLifecycleComponent {
     public static final String SETTING_SYSTEM_INDEX_ON_COMPACTION = "es.index_on_compaction";
     public static final String SETTING_SYSTEM_INDEX_INSERT_ONLY = "es.index_insert_only";
     public static final String SETTING_SYSTEM_INDEX_OPAQUE_STORAGE = "es.index_opaque_storage";
+    public static final String SETTING_SYSTEM_TOKEN_RANGES_QUERY_EXPIRE = "es.token_ranges_query_expire_minutes";
 
     /** Elassandra: publish local shard routing into gossip-related path (side-car stub). */
     public void publishShardRoutingState(String indexName, org.opensearch.cluster.routing.ShardRoutingState state) {
@@ -442,6 +514,21 @@ public class ClusterService extends AbstractLifecycleComponent {
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
         return org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal(query, values);
+    }
+
+    /**
+     * Elassandra: lightweight transaction / CAS write (fork parity; side-car executes as unconditional write).
+     */
+    public boolean processWriteConditional(
+        org.apache.cassandra.db.ConsistencyLevel cl,
+        org.apache.cassandra.db.ConsistencyLevel serialCl,
+        String query,
+        Object... values
+    ) throws org.apache.cassandra.exceptions.RequestExecutionException,
+             org.apache.cassandra.exceptions.RequestValidationException,
+             org.apache.cassandra.exceptions.InvalidRequestException {
+        process(cl, query, values);
+        return true;
     }
 
 }

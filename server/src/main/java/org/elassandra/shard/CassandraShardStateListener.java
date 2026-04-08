@@ -41,7 +41,6 @@ import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndice
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -78,7 +77,7 @@ public class CassandraShardStateListener implements IndexEventListener {
             clusterService.publishShardRoutingState(indexShard.shardId().getIndexName(), ShardRoutingState.STARTED);
             clusterService.submitStateUpdateTask("shard-started-update-routing index="+indexShard.indexService().index().getName(),
                     new RoutingTableUpdateTask(indexShard.indexService().index()), routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor, routingTableUpdateTaskExecutor);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error("Unexpected error", e);
         }
     }
@@ -130,7 +129,7 @@ public class CassandraShardStateListener implements IndexEventListener {
     public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
         try {
             clusterService.publishShardRoutingState(shardId.getIndexName(), ShardRoutingState.UNASSIGNED);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error("Unexpected error", e);
         }
     }
@@ -145,7 +144,7 @@ public class CassandraShardStateListener implements IndexEventListener {
     public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {
         try {
             clusterService.publishShardRoutingState(shardId.getIndexName(), null);
-        } catch (IOException e) {
+        } catch (Exception e) {
             logger.error("Unexpected error", e);
         }
     }

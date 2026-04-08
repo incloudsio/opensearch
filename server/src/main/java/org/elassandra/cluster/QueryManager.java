@@ -351,7 +351,7 @@ public class QueryManager {
         UntypedResultSet result = fetchRowInternal(indexShard, type, docPk, columnDefs.keySet().toArray(new String[columnDefs.size()]), columnDefs);
         onRefresh.accept(System.nanoTime() - time);
         if (!result.isEmpty()) {
-            return new Engine.GetResult(true, 1L, new DocIdAndVersion(0, 1L, 1L, 1L, null, 0), null, false); // Elassandra: OS 1.3 GetResult
+            return Engine.GetResult.elassandraRowExists();
         }
         return Engine.GetResult.NOT_EXISTS;
     }
@@ -522,7 +522,7 @@ public class QueryManager {
     public Object[] rowAsArray(final IndexShard indexShard, final String type, UntypedResultSet.Row row, boolean valueForSearch) throws IOException {
         final Object values[] = new Object[row.getColumns().size()];
         final DocumentMapper documentMapper = indexShard.mapperService().documentMapper(type);
-        final DocumentFieldMappers docFieldMappers = documentMapper.mappers();
+        final org.opensearch.index.mapper.MappingLookup docFieldMappers = documentMapper.mappers();
 
         int i = 0;
         for (ColumnSpecification colSpec : row.getColumns()) {
@@ -742,7 +742,7 @@ public class QueryManager {
             updateField(sourceMap, entry.getKey(), entry.getValue());  // build a tree from keys #295
 
         final Map<String, ObjectMapper> objectMappers = docMapper.objectMappers();
-        final DocumentFieldMappers fieldMappers = docMapper.mappers();
+        final org.opensearch.index.mapper.MappingLookup fieldMappers = docMapper.mappers();
 
 
         if (logger.isTraceEnabled())
@@ -854,7 +854,7 @@ public class QueryManager {
                     values, 0);
             final boolean applied = this.clusterService.processWriteConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
             if (!applied)
-                throw new VersionConflictEngineException(indexShard.shardId(), cfName, request.id(), "PAXOS insert failed, document already exists");
+                throw new VersionConflictEngineException(indexShard.shardId(), request.id(), "PAXOS insert failed, document already exists");
         } else {
             ElasticSecondaryIndex esi = ElasticSecondaryIndex.elasticSecondayIndices.get(keyspaceName+"."+cfName);
             ByteBuffer NULL_VALUE = (esi == null || !esi.isInsertOnly()) ? null : ByteBufferUtil.UNSET_BYTE_BUFFER;

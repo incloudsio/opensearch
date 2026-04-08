@@ -109,6 +109,10 @@ public class IndexRequest extends ReplicatedWriteRequest<IndexRequest> implement
     @Nullable
     private String routing;
 
+    /** Elassandra / legacy parent routing (not serialized on OpenSearch 7+ wire format). */
+    @Nullable
+    private String parent;
+
     private BytesReference source;
 
     private OpType opType = OpType.INDEX;
@@ -383,6 +387,17 @@ public class IndexRequest extends ReplicatedWriteRequest<IndexRequest> implement
     @Override
     public String routing() {
         return this.routing;
+    }
+
+    /** Elassandra: optional {@code _parent} id for CQL-backed indexing. */
+    public String parent() {
+        return parent;
+    }
+
+    /** Elassandra: optional {@code _parent} id for CQL-backed indexing. */
+    public IndexRequest parent(String parent) {
+        this.parent = parent;
+        return this;
     }
 
     /**

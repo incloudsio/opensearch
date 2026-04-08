@@ -30,6 +30,7 @@ import org.opensearch.common.io.stream.StreamInput;
 import org.opensearch.common.io.stream.StreamOutput;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.discovery.DiscoverySettings;
+import org.opensearch.tasks.Task;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.EmptyTransportResponseHandler;
 import org.opensearch.transport.TransportChannel;
@@ -67,7 +68,14 @@ public class AppliedClusterStateAction {
         this.transportService = transportService;
         this.appliedClusterStateListener = incomingClusterStateListener;
         this.discoverySettings = discoverySettings;
-        transportService.registerRequestHandler(APPLIED_ACTION_NAME, AppliedClusterStateRequest::new, ThreadPool.Names.SAME, false, false, new AppliedClusterStateRequestHandler());
+        transportService.registerRequestHandler(
+            APPLIED_ACTION_NAME,
+            ThreadPool.Names.SAME,
+            false,
+            false,
+            AppliedClusterStateRequest::new,
+            new AppliedClusterStateRequestHandler()
+        );
     }
 
     public void sendAppliedToNode(final DiscoveryNode node, final ClusterState clusterState, final Exception exception) {
@@ -127,7 +135,7 @@ public class AppliedClusterStateAction {
 
     private class AppliedClusterStateRequestHandler implements TransportRequestHandler<AppliedClusterStateRequest> {
         @Override
-        public void messageReceived(AppliedClusterStateRequest request, final TransportChannel channel) throws Exception {
+        public void messageReceived(AppliedClusterStateRequest request, final TransportChannel channel, Task task) throws Exception {
             handleAppliedRequest(request, channel);
         }
     }
@@ -146,9 +154,8 @@ public class AppliedClusterStateAction {
             this.e = e;
         }
 
-        @Override
-        public void readFrom(StreamInput in) throws IOException {
-            super.readFrom(in);
+        public AppliedClusterStateRequest(StreamInput in) throws IOException {
+            super(in);
             nodeId = in.readString();
             x2 = in.readString();
             e = in.readException();

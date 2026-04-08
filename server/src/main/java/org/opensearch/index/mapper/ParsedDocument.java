@@ -59,6 +59,9 @@ public class ParsedDocument {
 
     private Mapping dynamicMappingsUpdate;
 
+    /** Optional legacy _parent id (Elassandra secondary index). */
+    private String parent;
+
     public ParsedDocument(
         Field version,
         SeqNoFieldMapper.SequenceIDFields seqID,
@@ -112,6 +115,14 @@ public class ParsedDocument {
 
     public String routing() {
         return this.routing;
+    }
+
+    public String parent() {
+        return this.parent;
+    }
+
+    public void parent(String parent) {
+        this.parent = parent;
     }
 
     public Document rootDoc() {

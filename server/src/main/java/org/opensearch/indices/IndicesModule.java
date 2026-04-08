@@ -65,7 +65,11 @@ import org.opensearch.index.mapper.SeqNoFieldMapper;
 import org.opensearch.index.mapper.SourceFieldMapper;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.mapper.TypeFieldMapper;
+import org.opensearch.index.mapper.UidFieldMapper;
 import org.opensearch.index.mapper.VersionFieldMapper;
+import org.opensearch.index.mapper.ParentFieldMapper;
+import org.elassandra.index.mapper.internal.HostFieldMapper;
+import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.opensearch.index.seqno.RetentionLeaseBackgroundSyncAction;
 import org.opensearch.index.seqno.RetentionLeaseSyncAction;
 import org.opensearch.index.seqno.RetentionLeaseSyncer;
@@ -189,6 +193,11 @@ public class IndicesModule extends AbstractModule {
         builtInMetadataMappers.put(TypeFieldMapper.NAME, TypeFieldMapper.PARSER);
         builtInMetadataMappers.put(VersionFieldMapper.NAME, VersionFieldMapper.PARSER);
         builtInMetadataMappers.put(SeqNoFieldMapper.NAME, SeqNoFieldMapper.PARSER);
+        // Elassandra side-car metadata fields (secondary index / CQL)
+        builtInMetadataMappers.put(UidFieldMapper.NAME, UidFieldMapper.PARSER);
+        builtInMetadataMappers.put(TokenFieldMapper.NAME, TokenFieldMapper.PARSER);
+        builtInMetadataMappers.put(HostFieldMapper.NAME, HostFieldMapper.PARSER);
+        builtInMetadataMappers.put(ParentFieldMapper.NAME, ParentFieldMapper.PARSER);
         // _field_names must be added last so that it has a chance to see all the other mappers
         builtInMetadataMappers.put(FieldNamesFieldMapper.NAME, FieldNamesFieldMapper.PARSER);
         return Collections.unmodifiableMap(builtInMetadataMappers);

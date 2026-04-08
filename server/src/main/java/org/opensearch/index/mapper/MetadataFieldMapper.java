@@ -196,4 +196,13 @@ public abstract class MetadataFieldMapper extends ParametrizedFieldMapper {
         // do nothing
     }
 
+    /**
+     * Elassandra secondary index: invoked before mapped fields are materialized (fork parity).
+     */
+    public void preCreate(Object indexingContext) throws IOException {}
+    /**
+     * Elassandra secondary index: invoked after mapped fields are materialized (fork parity).
+     */
+    public void postCreate(Object indexingContext) throws IOException {}
+
 }

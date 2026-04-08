@@ -44,6 +44,8 @@ import org.opensearch.common.io.stream.Writeable;
 
 import java.io.IOException;
 
+import org.apache.cassandra.db.ConsistencyLevel;
+
 import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_WAIT_FOR_ACTIVE_SHARDS;
 
 /**
@@ -239,6 +241,11 @@ public final class ActiveShardCount implements Writeable {
             default:
                 return Integer.toString(value);
         }
+    }
+
+    /** Elassandra: map replication policy to Cassandra write CL (side-car stub). */
+    public ConsistencyLevel toCassandraConsistencyLevel() {
+        return ConsistencyLevel.LOCAL_QUORUM;
     }
 
 }

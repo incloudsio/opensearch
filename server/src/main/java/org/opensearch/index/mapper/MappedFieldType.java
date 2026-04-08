@@ -488,6 +488,11 @@ public abstract class MappedFieldType {
     }
 
     /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car stub). */
+    public Object cqlValue(Object value) {
+        return cqlValue(value, null);
+    }
+
+    /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car stub). */
     public Object cqlValue(Object value, org.apache.cassandra.db.marshal.AbstractType<?> type) {
         return value;
     }
