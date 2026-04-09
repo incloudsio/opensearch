@@ -164,18 +164,18 @@ public class ClusterChangedEventTests extends OpenSearchTestCase {
         IndexMetadata newIndexMeta = createIndexMetadata(index, originalIndexMeta.getVersion() + 1);
         assertTrue(
             "IndexMetadata with different version numbers must be considered changed",
-            ClusterChangedEvent.indexMetadataChanged(originalIndexMeta, newIndexMeta)
+            ClusterChangedEvent.indexMetaDataChanged(originalIndexMeta, newIndexMeta)
         );
 
         // test when it doesn't exist
         newIndexMeta = createIndexMetadata(new Index("doesntexist", UUIDs.randomBase64UUID()));
         assertTrue(
             "IndexMetadata that didn't previously exist should be considered changed",
-            ClusterChangedEvent.indexMetadataChanged(originalIndexMeta, newIndexMeta)
+            ClusterChangedEvent.indexMetaDataChanged(originalIndexMeta, newIndexMeta)
         );
 
         // test when its the same IndexMetadata
-        assertFalse("IndexMetadata should be the same", ClusterChangedEvent.indexMetadataChanged(originalIndexMeta, originalIndexMeta));
+        assertFalse("IndexMetadata should be the same", ClusterChangedEvent.indexMetaDataChanged(originalIndexMeta, originalIndexMeta));
     }
 
     /**

@@ -16,18 +16,18 @@
 package org.elassandra;
 
 import org.apache.cassandra.db.ConsistencyLevel;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Date;
 import java.util.Locale;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -63,7 +63,7 @@ public class TimeDisorderedTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '1' ", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id, f1) VALUES ('1',1) USING TIMESTAMP %d", now - 1000));
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(0L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(0L));
         
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id, f1) VALUES ('2',2) USING TIMESTAMP %d", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '2' ", now - 1500));

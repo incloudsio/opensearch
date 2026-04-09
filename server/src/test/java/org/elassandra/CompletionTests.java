@@ -15,18 +15,18 @@
  */
 package org.elassandra;
 
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.suggest.SuggestBuilder;
-import org.elasticsearch.search.suggest.completion.CompletionSuggestionBuilder;
-import org.elasticsearch.search.suggest.completion.context.CategoryQueryContext;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.ToXContent;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.suggest.SuggestBuilder;
+import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;
+import org.opensearch.search.suggest.completion.context.CategoryQueryContext;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -34,7 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -101,7 +101,7 @@ public class CompletionTests extends ESSingleNodeTestCase {
                 .setSize(0)
                 .get();
         
-        for(org.elasticsearch.search.suggest.Suggest.Suggestion.Entry<? extends org.elasticsearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
+        for(org.opensearch.search.suggest.Suggest.Suggestion.Entry<? extends org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
             assertThat(entry.getOptions().size(), equalTo(3));
         }
     }
@@ -154,7 +154,7 @@ public class CompletionTests extends ESSingleNodeTestCase {
                 .setSize(0)
                 .get();
         
-        for(org.elasticsearch.search.suggest.Suggest.Suggestion.Entry<? extends org.elasticsearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
+        for(org.opensearch.search.suggest.Suggest.Suggestion.Entry<? extends org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
             assertThat(entry.getOptions().size(), equalTo(3));
         }
     }
@@ -221,7 +221,7 @@ public class CompletionTests extends ESSingleNodeTestCase {
                 .suggest(sb)
                 .get();
         
-        for(org.elasticsearch.search.suggest.Suggest.Suggestion.Entry<? extends org.elasticsearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
+        for(org.opensearch.search.suggest.Suggest.Suggestion.Entry<? extends org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option> entry : rsp.getSuggest().getSuggestion("product_suggest").getEntries()) {
             assertThat(entry.getOptions().size(), equalTo(2));
         }
     }

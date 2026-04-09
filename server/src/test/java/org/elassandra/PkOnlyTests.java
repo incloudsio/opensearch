@@ -18,21 +18,21 @@ package org.elassandra;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.UTF8Type;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.action.get.GetResponse;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 
@@ -108,7 +108,7 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         
         // execute search
         SearchResponse resp = client().prepareSearch("test1").setTypes("pk_only").setQuery(QueryBuilders.matchQuery("b", "222")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         assertThat(resp.getHits().getAt(0).getId(), equalTo("[\"2\",\"22\",\"222\"]"));
         assertThat(resp.getHits().getAt(0).getSourceAsMap(), is(new HashMap<String, String>() {{ put("b","222"); }}));
     }

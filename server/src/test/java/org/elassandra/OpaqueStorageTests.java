@@ -17,19 +17,19 @@ package org.elassandra;
 
 import org.apache.cassandra.cql3.UntypedResultSet.Row;
 import org.apache.cassandra.db.ConsistencyLevel;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse;
-import org.elasticsearch.action.admin.indices.mapping.get.GetFieldMappingsResponse.FieldMappingMetaData;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.admin.indices.mapping.get.GetFieldMappingsResponse;
+import org.opensearch.action.admin.indices.mapping.get.GetFieldMappingsResponse.FieldMappingMetadata;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Map;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -59,17 +59,17 @@ public class OpaqueStorageTests extends ESSingleNodeTestCase {
 
         assertThat(client().prepareIndex("test", "mytype","1").setSource("{ \"foo\":\"bar\" }", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         assertThat(resp.getHits().getHits()[0].getSourceAsMap().get("foo"), equalTo("bar"));
 
         assertThat(client().prepareIndex("test", "mytype","2").setSource("{ \"foo\":\"bar\",\"big\":\"bang\" }", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         SearchResponse resp2 = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("big", "bang")).get();
         client().admin().indices().prepareRefresh("test");
-        assertThat(resp2.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp2.getHits().getTotalHits().value, equalTo(1L));
         assertThat(resp2.getHits().getHits()[0].getSourceAsMap().get("big"), equalTo("bang"));
 
         GetFieldMappingsResponse mappingResp = client().admin().indices().prepareGetFieldMappings("test").addTypes("mytype").setFields("big").get();
-        FieldMappingMetaData fmmd = mappingResp.mappings().get("test").get("mytype").get("big");
+        FieldMappingMetadata fmmd = mappingResp.mappings().get("test").get("mytype").get("big");
         Map<String, Object> mapMd = (Map<String, Object>)fmmd.sourceAsMap().get("big");
         assertThat(mapMd.get("type"), equalTo("text"));
 
@@ -78,7 +78,7 @@ public class OpaqueStorageTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, "INSERT INTO test.mytype (\"_id\",\"_source\") VALUES(?,?)", "1", row.getBlob("_source"));
 
         SearchResponse resp3 = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("big", "bang")).get();
-        assertThat(resp3.getHits().getTotalHits(), equalTo(2L));
+        assertThat(resp3.getHits().getTotalHits().value, equalTo(2L));
     }
 
 }

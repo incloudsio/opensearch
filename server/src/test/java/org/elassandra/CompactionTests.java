@@ -23,18 +23,18 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.metrics.CassandraMetricsRegistry;
 import org.apache.cassandra.service.StorageService;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Map;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -186,7 +186,7 @@ public class CompactionTests extends ESSingleNodeTestCase {
     
     @Test
     public void expiredTtlCompactionTest() throws Exception {
-        createIndex("test", Settings.builder().put(IndexMetaData.SETTING_INDEX_ON_COMPACTION, true).build());
+        createIndex("test", Settings.builder().put(IndexMetadata.SETTING_INDEX_ON_COMPACTION, true).build());
         ensureGreen("test");
         
         long N = 10;
@@ -265,7 +265,7 @@ public class CompactionTests extends ESSingleNodeTestCase {
     public void expiredTtlColumnCompactionTest() throws Exception {
         createIndex("test", Settings.builder()
                 .put("index.refresh_interval", -1)
-                .put(IndexMetaData.SETTING_INDEX_ON_COMPACTION, true)
+                .put(IndexMetadata.SETTING_INDEX_ON_COMPACTION, true)
                 .build());
         ensureGreen("test");
         

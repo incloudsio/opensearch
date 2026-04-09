@@ -1,6 +1,8 @@
 package org.elassandra;
 
+import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.ColumnSpecification;
+import org.apache.cassandra.cql3.QueryHandler;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
@@ -13,22 +15,22 @@ import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.elassandra.index.ElasticIncomingPayload;
-import org.elasticsearch.common.SuppressForbidden;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.TermQueryBuilder;
-import org.elasticsearch.search.aggregations.AggregationBuilders;
-import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
-import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
-import org.elasticsearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
-import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.common.SuppressForbidden;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.ToXContent;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.search.aggregations.AggregationBuilders;
+import org.opensearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
+import org.opensearch.search.aggregations.bucket.histogram.DateHistogramInterval;
+import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregationBuilder;
+import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
+import org.opensearch.search.aggregations.metrics.SumAggregationBuilder;
+import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -39,7 +41,7 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 
@@ -93,9 +95,20 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
         // message payload with protocol v4
         Long writetime = new Long(0);
         ByteBuffer buffer = UTF8Type.instance.decompose(esQuery);
-        QueryOptions queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 5000, null, null, ProtocolVersion.V4);
-        QueryState queryState = new QueryState( ClientState.forInternalCalls());
-        ResultMessage message = ClientState.getCQLQueryHandler().process("SELECT * FROM test.foo WHERE es_query=?", queryState, queryOptions, Collections.EMPTY_MAP, System.nanoTime());
+        QueryOptions queryOptions = QueryOptions.create(
+            ConsistencyLevel.ONE,
+            Collections.singletonList(buffer),
+            false,
+            5000,
+            null,
+            null,
+            ProtocolVersion.V4,
+            null
+        );
+        QueryState queryState = new QueryState(ClientState.forInternalCalls());
+        QueryHandler handler = ClientState.getCQLQueryHandler();
+        CQLStatement stmt = handler.parse("SELECT * FROM test.foo WHERE es_query=?", queryState, queryOptions);
+        ResultMessage message = handler.process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
         ElasticIncomingPayload payloadInfo = new ElasticIncomingPayload(message.getCustomPayload());
         assertThat(payloadInfo.hitTotal, equalTo(100L));
         assertThat(payloadInfo.shardSuccessful, equalTo(1));
@@ -103,8 +116,9 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
         assertThat(payloadInfo.shardSkipped, equalTo(0));
 
         // page size = 75
-        queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 75, null, null, ProtocolVersion.V4);
-        message = ClientState.getCQLQueryHandler().process("SELECT * FROM test.foo WHERE es_query=? LIMIT 1000", queryState, queryOptions, Collections.EMPTY_MAP, System.nanoTime());
+        queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 75, null, null, ProtocolVersion.V4, null);
+        stmt = handler.parse("SELECT * FROM test.foo WHERE es_query=? LIMIT 1000", queryState, queryOptions);
+        message = handler.process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
         rs = UntypedResultSet.create(((ResultMessage.Rows) message).result);
         assertThat(rs.size(), equalTo(75));
     }

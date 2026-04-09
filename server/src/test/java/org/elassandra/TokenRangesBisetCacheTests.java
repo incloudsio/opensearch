@@ -24,14 +24,14 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.elasticsearch.action.admin.indices.segments.IndexShardSegments;
-import org.elasticsearch.action.admin.indices.segments.ShardSegments;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.index.engine.Segment;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.admin.indices.segments.IndexShardSegments;
+import org.opensearch.action.admin.indices.segments.ShardSegments;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.index.engine.Segment;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 /**
@@ -75,23 +75,26 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
             nbHits = client().prepareSearch().setIndices("test").setTypes("t1")
                 .setQuery(QueryBuilders.rangeQuery("b").gte(0))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(Long.MAX_VALUE-1))))
-                .get().getHits().getTotalHits();
+                .get().getHits().getTotalHits().value;
         }
 
         long upper = client().prepareSearch().setIndices("test").setTypes("t1")
                 .setQuery(QueryBuilders.rangeQuery("b").gte(0))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(0), new LongToken(Long.MAX_VALUE-1))))
-                .get().getHits().getTotalHits();
+                .get().getHits().getTotalHits().value;
         assertThat(upper, lessThan(nbHits));
 
         long lower = client().prepareSearch().setIndices("test").setTypes("t1")
                 .setQuery(QueryBuilders.rangeQuery("b").gte(0))
                 .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(0))))
-                .get().getHits().getTotalHits();
+                .get().getHits().getTotalHits().value;
         assertThat(lower, lessThan(nbHits));
 
         assertThat(lower+upper, equalTo(nbHits));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(
+            client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value,
+            equalTo(N)
+        );
     }
 
 }

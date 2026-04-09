@@ -261,7 +261,7 @@ public class ReadOnlyEngineTests extends EngineTestCase {
                     ? AssertionError.class
                     : UnsupportedOperationException.class;
                 expectThrows(expectedException, () -> readOnlyEngine.index(null));
-                expectThrows(expectedException, () -> readOnlyEngine.delete(null));
+                expectThrows(expectedException, () -> readOnlyEngine.delete((Engine.Delete) null));
                 expectThrows(expectedException, () -> readOnlyEngine.noOp(null));
                 expectThrows(UnsupportedOperationException.class, () -> readOnlyEngine.syncFlush(null, null));
             }

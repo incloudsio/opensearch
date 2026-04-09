@@ -17,15 +17,17 @@ package org.elassandra;
 
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import java.util.Collections;
+
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -88,7 +90,7 @@ public class NamingTests extends ESSingleNodeTestCase {
 
         assertThat(client().admin().indices().preparePutTemplate("test_template")
                 .addMapping("_default_", mapping1)
-                .setTemplate("test_index-*")
+                .setPatterns(Collections.singletonList("test_index-*"))
                 .get().isAcknowledged(), equalTo(true));
 
         assertThat(client().prepareIndex("test_index-2016.12.29", "_doc", "1")
@@ -98,7 +100,10 @@ public class NamingTests extends ESSingleNodeTestCase {
 
         assertThat(client().prepareGet().setIndex("test_index-2016.12.29").setType("_doc").setId("1").get().isExists(), equalTo(true));
         assertThat(client().prepareMultiGet().add("test_index-2016.12.29","_doc","1").get().getResponses().length, equalTo(1));
-        assertThat(client().prepareSearch("test_index-2016.12.29").setTypes("_doc").setQuery(QueryBuilders.queryStringQuery("message:hello")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(
+            client().prepareSearch("test_index-2016.12.29").setQuery(QueryBuilders.queryStringQuery("message:hello")).get().getHits().getTotalHits().value,
+            equalTo(1L)
+        );
         assertThat(client().prepareDelete().setIndex("test_index-2016.12.29").setType("_doc").setId("1").get().getId(), equalTo("1"));
         assertThat(client().admin().indices().prepareDelete("test_index-2016.12.29").get().isAcknowledged(), equalTo(true));
         assertThat(client().admin().indices().prepareDeleteTemplate("test_template").get().isAcknowledged(), equalTo(true));

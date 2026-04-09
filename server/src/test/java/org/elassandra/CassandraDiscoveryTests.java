@@ -25,25 +25,25 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.service.StorageService;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateUpdateTask;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
-import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.test.ESSingleNodeTestCase;
-import org.elasticsearch.test.discovery.MockCassandraDiscovery;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.ClusterStateUpdateTask;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.MappingMetadata;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.mapper.MapperService;
+import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.discovery.MockCassandraDiscovery;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
@@ -107,12 +107,12 @@ public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
                     @Override
                     public ClusterState execute(ClusterState currentState) {
                         ClusterState.Builder newStateBuilder = ClusterState.builder(currentState);
-                        MetaData newMetadata = MetaData.builder(currentState.metaData())
+                        Metadata newMetadata = Metadata.builder(currentState.metadata())
                                 .persistentSettings(Settings.builder().build())
                                 .version(version + 1)
                                 .build();
-                        ClusterState newClusterState = newStateBuilder.incrementVersion().metaData(newMetadata).build();
-                        logger.warn("submit cql-schema-mapping-update metadata.version={}",  newClusterState.metaData().version());
+                        ClusterState newClusterState = newStateBuilder.incrementVersion().metadata(newMetadata).build();
+                        logger.warn("submit cql-schema-mapping-update metadata.version={}",  newClusterState.metadata().version());
                         return newClusterState;
                     }
 
@@ -127,7 +127,7 @@ public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
 
         assertThat(client().prepareIndex("test", "my_type", "1").setSource("{\"status_code\": \"OK\" }", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         assertEquals(1, resumit);
-        assertEquals(version + 2, this.clusterService().state().metaData().version());
+        assertEquals(version + 2, this.clusterService().state().metadata().version());
     }
 
 
@@ -174,8 +174,8 @@ public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
         Map<String, ByteBuffer> extensionsMap = urs.one().getMap("extensions", UTF8Type.instance, BytesType.instance);
         assertNotNull(extensionsMap);
 
-        IndexMetaData indexMetaDataTest1 = clusterService().getIndexMetaDataFromExtension(extensionsMap.get("elastic_admin/test1"));
-        MappingMetaData mmd = indexMetaDataTest1.getMappings().get("t1");
+        IndexMetadata indexMetaDataTest1 = clusterService().getIndexMetaDataFromExtension(extensionsMap.get("elastic_admin/test1"));
+        MappingMetadata mmd = indexMetaDataTest1.getMappings().get("t1");
         assertNotNull(mmd);
 
         Map<String, Object> mapping = mmd.getSourceAsMap();

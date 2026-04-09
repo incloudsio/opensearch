@@ -633,4 +633,12 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
         this.request.setCancelAfterTimeInterval(cancelAfterTimeInterval);
         return this;
     }
+
+    /**
+     * Elassandra: restrict search to Cassandra token ranges (fork parity; full wiring stores ranges on {@link SearchRequest}).
+     * Side-car stub for compile; no-op.
+     */
+    public SearchRequestBuilder setTokenRanges(java.util.Set<?> tokenRanges) {
+        return this;
+    }
 }

@@ -30,31 +30,31 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.lucene.search.join.ScoreMode;
 import org.elassandra.cluster.Serializer;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
-import org.elasticsearch.action.index.IndexResponse;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.update.UpdateResponse;
-import org.elasticsearch.client.Response;
-import org.elasticsearch.common.geo.GeoPoint;
-import org.elasticsearch.common.geo.GeoUtils;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.InnerHitBuilder;
-import org.elasticsearch.index.query.Operator;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.aggregations.Aggregation;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.aggregations.AggregationBuilders;
-import org.elasticsearch.search.aggregations.bucket.nested.InternalNested;
-import org.elasticsearch.search.aggregations.metrics.sum.InternalSum;
-import org.elasticsearch.search.sort.NestedSortBuilder;
-import org.elasticsearch.search.sort.SortBuilders;
-import org.elasticsearch.search.sort.SortOrder;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.action.admin.indices.create.CreateIndexRequestBuilder;
+import org.opensearch.action.index.IndexResponse;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.update.UpdateResponse;
+import org.opensearch.client.Response;
+import org.opensearch.common.geo.GeoPoint;
+import org.opensearch.common.geo.GeoUtils;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.index.query.Operator;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.aggregations.Aggregation;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.aggregations.AggregationBuilders;
+import org.opensearch.search.aggregations.bucket.nested.InternalNested;
+import org.opensearch.search.aggregations.metrics.InternalSum;
+import org.opensearch.search.sort.NestedSortBuilder;
+import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.math.BigDecimal;
@@ -66,7 +66,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -333,7 +333,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     }
 
     // #91 test
-    // mvn test -Pdev -pl org.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObject" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl org.opensearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObject" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testMapAsObject() throws Exception {
         createIndex("test");
@@ -524,7 +524,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 RandomPicks.randomFrom(random(), ScoreMode.values()))).get().getHits().getTotalHits(), equalTo(0L));
     }
 
-    // mvn test -Pdev -pl org.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObjectWithDynamicMapping" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl org.opensearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testMapAsObjectWithDynamicMapping" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testMapAsObjectWithDynamicMapping() throws Exception {
         createIndex("test");
@@ -620,7 +620,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     // #91 test
     // see https://www.elastic.co/guide/en/elasticsearch/reference/2.4/null-value.html
     // see https://www.datastax.com/dev/blog/cql3_collections (empty list = null)
-    // mvn test -Pdev -pl org.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testNullValue" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl org.opensearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testNullValue" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testNullValue() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -656,7 +656,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
     }
 
     // #112 test
-    // mvn test -Pdev -pl org.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSets" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
+    // mvn test -Pdev -pl org.opensearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.CqlTypesTests -Dtests.method="testSets" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
     @Test
     public void testSets() throws Exception {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
@@ -810,7 +810,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             ))
             .setFetchSource(true)
             .get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         System.out.println("hits[0]=" + resp.getHits().getAt(0).getSourceAsString());
         System.out.println("inner_hits="+resp.getHits().getAt(0).getInnerHits());
         assertNotNull(resp.getHits().getAt(0).getInnerHits());
@@ -872,7 +872,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         System.out.println("hits[1]="+resp.getHits().getHits()[1].getSourceAsString());
         System.out.println("hits[2]="+resp.getHits().getHits()[2].getSourceAsString());
 
-        assertThat(resp.getHits().getTotalHits(), equalTo(3L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(3L));
 
         assertThat(client().prepareSearch().setIndices("test-issue-index")
                 .setTypes("test-issue")
@@ -942,7 +942,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, "UPDATE test.table_test SET list = list + [{ id:'bar'}] where id1='1' and id2='2';");
 
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("table_test").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         List<Object> list = (List<Object>) resp.getHits().getAt(0).getSourceAsMap().get("list");
         assertThat(list.size(), equalTo(2));
         Map<String, Object> map = (Map<String, Object>)list.get(0);
@@ -986,19 +986,19 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertTrue(client().admin().indices().preparePutMapping("test").setType("t1").setSource(mapping).get().isAcknowledged());
         process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id3 = 'foo' where id1='1' and id2='2';");
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
 
         process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id4 = 'foo' where id1='1' and id2='2';");
         resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
 
         process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id4 = null where id1='1' and id2='2';");
         resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
 
         process(ConsistencyLevel.ONE, "UPDATE test.t1 SET id3 = null where id1='1' and id2='2';");
         resp = client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(0L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(0L));
     }
 
     // test CQL timeuuid, date and time mapping.
@@ -1020,7 +1020,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 "1", start, end, SimpleDateSerializer.dateStringToDays("2010-10-10"), 10*3600*1000000000L);
 
         SearchResponse resp = client().prepareSearch().setIndices("test").setTypes("event_test").setQuery(QueryBuilders.queryStringQuery("day:2010-10-10")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         assertThat(resp.getHits().getHits()[0].getSourceAsMap().get("day"), equalTo("2010-10-10T00:00:00.000Z"));
         assertThat(resp.getHits().getHits()[0].getSourceAsMap().get("hour"), equalTo(36000000000000L));
         assertThat(resp.getHits().getHits()[0].getSourceAsMap().get("start"), equalTo(start.toString()));
@@ -1037,7 +1037,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         assertThat(client().prepareIndex("test", "typeA", "2").setSource("{ \"b\":\"1\", \"x\":\"aaa\" }", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         assertThat(client().prepareIndex("test", "typeA", "3").setSource("{ \"c\":\"1\", \"x\":\"aaa\" }", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.queryStringQuery("q=aaa")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(3L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(3L));
     }
 
     // see issue #142
@@ -1079,7 +1079,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
         SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(2L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(2L));
         assertThat(resp.getFailedShards(), equalTo(0));
     }
 
@@ -1094,7 +1094,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE,"INSERT INTO example.sessions (id, project_id, day) VALUES (now(), uuid(), toDate(now()));");
 
         SearchResponse resp = client().prepareSearch().setIndices("example").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
      }
 
     // #292 test
@@ -1127,7 +1127,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .addMapping("sessions", mapping));
         process(ConsistencyLevel.ONE,"INSERT INTO example.sessions (id, day) VALUES ('1', '2019-05-01');");
         SearchResponse resp = client().prepareSearch().setIndices("example").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
      }
 
     @Test
@@ -1214,11 +1214,11 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
 
         SearchResponse resp = client().prepareSearch().setIndices("test")
                 .setQuery(QueryBuilders.matchQuery("first_name", "John")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
 
         resp = client().prepareSearch().setIndices("test")
                 .setQuery(QueryBuilders.matchQuery("full_name", "John Smith").operator(Operator.AND)).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
     }
 
     @Test
@@ -1258,11 +1258,11 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
 
         SearchResponse resp = client().prepareSearch().setIndices("copytest")
                 .setQuery(QueryBuilders.nestedQuery("nest", QueryBuilders.matchQuery("nest.first_name", "John"), RandomPicks.randomFrom(random(), ScoreMode.values()))).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
 
         resp = client().prepareSearch().setIndices("copytest")
                 .setQuery(QueryBuilders.nestedQuery("nest", QueryBuilders.matchQuery("nest.full_name", "John Smith").operator(Operator.AND), RandomPicks.randomFrom(random(), ScoreMode.values()))).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
     }
 
     @Test
@@ -1284,7 +1284,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
         SearchResponse resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         String _source = resp.getHits().getHits()[0].getSourceAsString();
         System.out.println(_source);
         assertTrue(_source.contains("\"127.0.0.1\""));
@@ -1343,15 +1343,15 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
         SearchResponse resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.er", "blabla")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         assertThat(((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("er"), equalTo("blabla"));
 
         resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.form", "foo")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         assertThat(((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("form"), equalTo("foo"));
 
         resp = client().prepareSearch().setIndices("test1").setQuery(QueryBuilders.termQuery("us.mail.to", "bob@foo.com")).get();
-        assertThat(resp.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         assertThat(((Map<String, Object>)((Map<String, Object>)resp.getHits().getAt(0).getSourceAsMap().get("us")).get("mail")).get("to"), equalTo("bob@foo.com"));
     }
 
@@ -1405,7 +1405,7 @@ public class CqlTypesTests extends ESSingleNodeTestCase {
             assertThat(client().prepareDelete("test", "my_type", "1")
                 .get().getResult(), equalTo(DocWriteResponse.Result.DELETED));
             SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
-            assertThat(resp.getHits().getTotalHits(), equalTo(0L));
+            assertThat(resp.getHits().getTotalHits().value, equalTo(0L));
         }
     }
 

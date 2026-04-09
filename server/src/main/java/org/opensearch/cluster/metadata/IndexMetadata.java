@@ -665,6 +665,34 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     public static final String SETTING_TABLE_OPTIONS = "index.table_options";
     public static final String SETTING_INDEX_OPAQUE_STORAGE = "index.opaque_storage";
     public static final String SETTING_VIRTUAL = "index.virtual";
+    public static final String SETTING_VIRTUAL_INDEX = "index.virtual_index";
+    public static final String SETTING_REPLICATION = "index.replication";
+    public static final String SETTING_INDEX_ON_COMPACTION = "index.index_on_compaction";
+
+    /** Elassandra virtual index flags (fork parity; used by tests). */
+    public static final org.opensearch.common.settings.Setting<Boolean> INDEX_SETTING_VIRTUAL_SETTING = org.opensearch.common.settings.Setting.boolSetting(
+        SETTING_VIRTUAL,
+        false,
+        org.opensearch.common.settings.Setting.Property.Final,
+        org.opensearch.common.settings.Setting.Property.IndexScope
+    );
+
+    public static final org.opensearch.common.settings.Setting<String> INDEX_SETTING_VIRTUAL_INDEX_SETTING =
+        org.opensearch.common.settings.Setting.simpleString(
+            SETTING_VIRTUAL_INDEX,
+            org.opensearch.common.settings.Setting.Property.Final,
+            org.opensearch.common.settings.Setting.Property.IndexScope
+        );
+
+    /** Elassandra DC replication list (fork parity), e.g. {@code DC1:1}. */
+    public static final org.opensearch.common.settings.Setting<java.util.List<String>> INDEX_SETTING_REPLICATION_SETTING =
+        org.opensearch.common.settings.Setting.listSetting(
+            SETTING_REPLICATION,
+            java.util.Collections.emptyList(),
+            java.util.function.Function.identity(),
+            org.opensearch.common.settings.Setting.Property.Final,
+            org.opensearch.common.settings.Setting.Property.IndexScope
+        );
 
     /** Cassandra keyspace for this index. */
     public String keyspace() {

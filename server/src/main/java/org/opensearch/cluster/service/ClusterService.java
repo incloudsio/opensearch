@@ -72,6 +72,9 @@ public class ClusterService extends AbstractLifecycleComponent {
     /** Elassandra: secondary index class setting key (fork parity; side-car stub). */
     public static final String SETTING_CLUSTER_SECONDARY_INDEX_CLASS = "cluster.secondary_index_class";
 
+    /** Elassandra: cluster-wide search strategy class (fork parity; matches ES fork {@code cluster.search_strategy_class}). */
+    public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.search_strategy_class";
+
     public static final Class<?> defaultSecondaryIndexClass = org.elassandra.index.ExtendedElasticSecondaryIndex.class;
 
     /**
@@ -514,6 +517,34 @@ public class ClusterService extends AbstractLifecycleComponent {
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
         return org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal(query, values);
+    }
+
+    /** Elassandra: CQL with explicit {@link org.apache.cassandra.service.ClientState} (fork parity). */
+    public org.apache.cassandra.cql3.UntypedResultSet process(
+        org.apache.cassandra.db.ConsistencyLevel cl,
+        org.apache.cassandra.service.ClientState clientState,
+        String query
+    ) throws org.apache.cassandra.exceptions.RequestExecutionException,
+             org.apache.cassandra.exceptions.RequestValidationException,
+             org.apache.cassandra.exceptions.InvalidRequestException {
+        return process(cl, query);
+    }
+
+    /** Elassandra: CQL with client state and bound values (fork parity). */
+    public org.apache.cassandra.cql3.UntypedResultSet process(
+        org.apache.cassandra.db.ConsistencyLevel cl,
+        org.apache.cassandra.service.ClientState clientState,
+        String query,
+        Object... values
+    ) throws org.apache.cassandra.exceptions.RequestExecutionException,
+             org.apache.cassandra.exceptions.RequestValidationException,
+             org.apache.cassandra.exceptions.InvalidRequestException {
+        return process(cl, query, values);
+    }
+
+    /** Elassandra: access Cassandra discovery from tests (fork parity; side-car may return null). */
+    public org.elassandra.discovery.CassandraDiscovery getCassandraDiscovery() {
+        return null;
     }
 
     /**

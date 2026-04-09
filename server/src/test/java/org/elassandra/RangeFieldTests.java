@@ -16,14 +16,14 @@
 package org.elassandra;
 
 import org.apache.lucene.document.InetAddressPoint;
-import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.test.ESSingleNodeTestCase;
+import org.opensearch.action.DocWriteResponse;
+import org.opensearch.common.bytes.BytesReference;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import java.text.ParseException;
@@ -34,11 +34,11 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
-import static org.elasticsearch.index.query.RangeQueryBuilder.GTE_FIELD;
-import static org.elasticsearch.index.query.RangeQueryBuilder.GT_FIELD;
-import static org.elasticsearch.index.query.RangeQueryBuilder.LTE_FIELD;
-import static org.elasticsearch.index.query.RangeQueryBuilder.LT_FIELD;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.opensearch.index.query.RangeQueryBuilder.GTE_FIELD;
+import static org.opensearch.index.query.RangeQueryBuilder.GT_FIELD;
+import static org.opensearch.index.query.RangeQueryBuilder.LTE_FIELD;
+import static org.opensearch.index.query.RangeQueryBuilder.LT_FIELD;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
