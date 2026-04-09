@@ -11,7 +11,6 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FilteredDocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.join.BitSetProducer;
@@ -110,8 +109,7 @@ public class TokenRangesBitsetProducer implements BitSetProducer, Accountable {
       final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
       final IndexSearcher searcher = new IndexSearcher(topLevelContext);
       searcher.setQueryCache(null);
-      Query rq = searcher.rewrite(query);
-      final Weight weight = searcher.createWeight(rq, ScoreMode.COMPLETE_NO_SCORES, 1.0f);
+      final Weight weight = LuceneWeights.create(searcher, query, topLevelContext.reader());
       final Scorer s = weight.scorer(context);
       int tombestones = 0;
       if (s != null) {

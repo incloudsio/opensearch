@@ -8,12 +8,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.cli.LoggingAwareCommand;
 import org.opensearch.cli.Terminal;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.common.io.stream.InputStreamStreamInput;
-import org.opensearch.common.io.stream.StreamInput;
-import org.opensearch.common.xcontent.*;
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+import org.opensearch.common.xcontent.NamedXContentRegistry;
+import org.opensearch.common.xcontent.ToXContent;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentParser;
+import org.opensearch.common.xcontent.XContentType;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
@@ -47,11 +51,12 @@ public class DecodeMetaDataCommand extends LoggingAwareCommand {
     }
 
     public final String convertToMetaData(byte[] bytes) {
-        try {
-            final Metadata metdata;
-            try (StreamInput in = new InputStreamStreamInput(new ByteArrayInputStream(bytes))) {
-                metdata = Metadata.readFrom(in);
-            }
+        try (XContentParser parser = XContentFactory.xContent(XContentType.SMILE).createParser(
+            new NamedXContentRegistry(Collections.emptyList()),
+            LoggingDeprecationHandler.INSTANCE,
+            bytes
+        )) {
+            Metadata metdata = Metadata.Builder.fromXContent(parser);
 
             XContentBuilder builder = XContentFactory.contentBuilder(XContentType.JSON);
             builder.prettyPrint();

@@ -68,7 +68,7 @@ public class TimeDisorderedTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id, f1) VALUES ('2',2) USING TIMESTAMP %d", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '2' ", now - 1500));
         SearchResponse resp2 = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp2.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp2.getHits().getTotalHits().value, equalTo(1L));
     }
     
     @Test
@@ -101,11 +101,11 @@ public class TimeDisorderedTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('1',0,0) USING TIMESTAMP %d", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '1' and c1 = 1", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('1',1,1) USING TIMESTAMP %d", now - 2000)); // not visible
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(1L));
         
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('2',1,1) USING TIMESTAMP %d", now)); // visible
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '2' and c1 = 1", now - 2000));
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2L));
         
         // play range delete before a previous-insert
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '3' and c1 > 0 AND c1 <= 2", now));
@@ -113,7 +113,7 @@ public class TimeDisorderedTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('3',1,1) USING TIMESTAMP %d", now - 1000)); // visible
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('3',2,2) USING TIMESTAMP %d", now - 1000)); // not visible
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('3',3,3) USING TIMESTAMP %d", now - 1000)); // not visible
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("id", 3)).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("id", 3)).get().getHits().getTotalHits().value, equalTo(2L));
         
         // play insert before an obsolete delete
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('4',0,0) USING TIMESTAMP %d", now )); // visible
@@ -121,9 +121,9 @@ public class TimeDisorderedTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('4',2,2) USING TIMESTAMP %d", now)); // visible
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1) VALUES ('4',3,3) USING TIMESTAMP %d", now)); // visible
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '4' and c1 > 0 AND c1 <= 2", now - 1000)); // not visible
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("id", 4)).get().getHits().getTotalHits(), equalTo(4L));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("id", 4)).get().getHits().getTotalHits().value, equalTo(4L));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 WHERE id = '4' and c1 > 0 AND c1 <= 2")); // visible
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("id", 4)).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("id", 4)).get().getHits().getTotalHits().value, equalTo(2L));
     }
     
     @Test
@@ -270,25 +270,25 @@ public class TimeDisorderedTests extends ESSingleNodeTestCase {
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '1' and c1 = 1", now ));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('1',1,1,0) USING TIMESTAMP %d", now - 1000)); // not visible
         
-        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(1L));
-        assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(1L));
+        assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(2L));
+        assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(2L));
+        assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(1L));
         
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('2',1,1,0) USING TIMESTAMP %d", now));
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"DELETE FROM test.t1 USING TIMESTAMP %d WHERE id = '2' and c1 = 1", now - 1500));
         
-        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(4L));
-        assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(4L));
-        assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(2L));
+        assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(4L));
+        assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(4L));
+        assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(2L));
         
         // remove a static doc
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT,"INSERT INTO test.t1 (id,c1,f1,s1) VALUES ('2',1,1,null)"));
-        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(1L));
-        assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(2L));
-        assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat( client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(1L));
+        assertThat( client().prepareSearch().setIndices("test2").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(2L));
+        assertThat( client().prepareSearch().setIndices("test3").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(2L));
+        assertThat( client().prepareSearch().setIndices("test4").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("s1:0")).get().getHits().getTotalHits().value, equalTo(1L));
     }
 }
 

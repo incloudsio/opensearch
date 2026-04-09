@@ -283,15 +283,13 @@ public abstract class AbstractSearchStrategy {
                                     EMPTY_RANGE_TOKEN_LIST);
                             shards.add(replicaShardRouting);
                         }
-                        IndexShardRoutingTable.Builder tableBuilder = new IndexShardRoutingTable.Builder(new ShardId(index, shardId));
+                        IndexShardRoutingTable.Builder shardTableBuilder = new IndexShardRoutingTable.Builder(new ShardId(index, shardId));
                         for (ShardRouting sr : shards) {
-                            tableBuilder.addShard(sr);
+                            shardTableBuilder.addShard(sr);
                         }
-                        isrt.add(tableBuilder.build());
+                        isrt.add(shardTableBuilder.build());
                     } else {
-                        isrt.add(
-                            new IndexShardRoutingTable.Builder(new ShardId(index, shardId)).addShard(primaryShardRouting).build()
-                        );
+                        isrt.add(new IndexShardRoutingTable.Builder(new ShardId(index, shardId)).addShard(primaryShardRouting).build());
                     }
 
                     if (shardId != 0)
@@ -307,8 +305,7 @@ public abstract class AbstractSearchStrategy {
                                 unassignedInfo(node, ShardRoutingState.UNASSIGNED),
                                 Router.this.getTokenRanges(Router.this.redShards.get(node)));
                         isrt.add(
-                            new IndexShardRoutingTable.Builder(new ShardId(index, shardId)).addShard(primaryShardRouting).build()
-                        );
+                            new IndexShardRoutingTable.Builder(new ShardId(index, shardId)).addShard(primaryShardRouting).build());
                         if (shardId != 0)
                             i++;
                     }

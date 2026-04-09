@@ -265,7 +265,7 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         }
     }
 
-    private void performStateRecovery(final boolean enforceRecoverAfterTime, final String reason) {
+    protected void performStateRecovery(final boolean enforceRecoverAfterTime, final String reason) {
         if (enforceRecoverAfterTime && recoverAfterTime != null) {
             if (scheduledRecovery.compareAndSet(false, true)) {
                 logger.info("delaying initial state recovery for [{}]. {}", recoverAfterTime, reason);

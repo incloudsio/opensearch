@@ -63,7 +63,7 @@ public class TruncateTests extends ESSingleNodeTestCase {
                 "          }\n" + 
                 "        ]}", XContentType.JSON).get();
         assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("user").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("user").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(1L));
         int totalDocs = 0;
         for(IndexShardSegments iss : client().admin().indices().prepareSegments("test").get().getIndices().get("test")) {
             for(ShardSegments ss : iss.getShards()) {
@@ -75,7 +75,7 @@ public class TruncateTests extends ESSingleNodeTestCase {
         assertThat(totalDocs, equalTo(3));
         
         process(ConsistencyLevel.ONE,"TRUNCATE test.user");
-        assertThat(client().prepareSearch().setIndices("test").setTypes("user").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("user").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(0L));
         totalDocs = 0;
         for(IndexShardSegments iss : client().admin().indices().prepareSegments("test").get().getIndices().get("test")) {
             for(ShardSegments ss : iss.getShards()) {

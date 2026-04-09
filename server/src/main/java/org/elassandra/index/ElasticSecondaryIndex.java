@@ -84,7 +84,6 @@ import org.apache.lucene.document.LongPoint;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.document.StoredField;
-import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LeafReaderContext;
@@ -96,7 +95,6 @@ import org.apache.lucene.search.IndexOrDocValuesQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TermRangeQuery;
@@ -107,10 +105,9 @@ import org.apache.lucene.util.CloseableThreadLocal;
 import org.elassandra.cluster.ElassandraIndexSettings;
 import org.elassandra.cluster.SchemaManager;
 import org.elassandra.cluster.Serializer;
+import org.elassandra.index.search.LuceneWeights;
 import org.elassandra.index.ElasticSecondaryIndex.ImmutableMappingInfo.WideRowcumentIndexer.WideRowcument;
 import org.opensearch.OpenSearchException;
-import org.opensearch.LegacyESVersion;
-import org.opensearch.Version;
 import org.opensearch.action.admin.indices.flush.FlushRequest;
 import org.opensearch.cluster.ClusterChangedEvent;
 import org.opensearch.cluster.ClusterName;
@@ -1502,9 +1499,7 @@ public class ElasticSecondaryIndex implements Index {
                         final IndexReaderContext topLevelContext = ReaderUtil.getTopLevelContext(context);
                         final IndexSearcher searcher = new IndexSearcher(topLevelContext);
                         searcher.setQueryCache(null);
-                        Query mq = new MatchAllDocsQuery();
-                        mq = searcher.rewrite(mq);
-                        final Weight weight = searcher.createWeight(mq, ScoreMode.COMPLETE_NO_SCORES, 1.0f);
+                        final Weight weight = LuceneWeights.create(searcher, new MatchAllDocsQuery(), topLevelContext.reader());
                         Scorer s = weight.scorer(context);
                         return (s == null) ? null : org.apache.lucene.util.BitSet.of(s.iterator(), context.reader().maxDoc());
                     }
@@ -2029,9 +2024,10 @@ public class ElasticSecondaryIndex implements Index {
 
             public Term termUid(IndexService indexService, String id) {
                 Term termUid;
-                if (indexService.getIndexSettings().getIndexVersionCreated().onOrAfter(LegacyESVersion.V_6_0_0_beta1)) {
+                if (ElassandraSecondaryIndexCompat.indexVersionOnOrAfter600Beta1(indexService.getIndexSettings())) {
                     termUid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
-                } else if (indexService.mapperService().documentMapper(typeName).idFieldMapper().fieldType().isSearchable()) {
+                } else if (ElassandraSecondaryIndexCompat.mappedFieldTypeIsSearchable(
+                    indexService.mapperService().documentMapper(typeName).idFieldMapper().fieldType())) {
                     termUid = new Term(IdFieldMapper.NAME, id);
                 } else {
                     termUid = new Term(IdFieldMapper.NAME, Uid.encodeId(id));

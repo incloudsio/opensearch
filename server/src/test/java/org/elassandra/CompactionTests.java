@@ -83,8 +83,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", i, "x", i);
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", i, "y", i);
         }
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(100L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*100L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(100L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*100L));
         StorageService.instance.forceKeyspaceFlush("test1","t1");
         StorageService.instance.forceKeyspaceFlush("test2","t2");
         
@@ -99,8 +99,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", i, "x", i);
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", i, "y", i);
         }
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(200L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*200L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(200L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*200L));
         StorageService.instance.forceKeyspaceFlush("test1","t1");
         StorageService.instance.forceKeyspaceFlush("test2","t2");
         Thread.sleep(200);
@@ -113,8 +113,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", i, "x", i);
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", i, "y", i);
         }
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(300L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*300L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(300L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*300L));
         StorageService.instance.forceKeyspaceFlush("test1");
         StorageService.instance.forceKeyspaceFlush("test2");
         assertThat(gaugest1.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test1.t1").getValue(), equalTo(3));
@@ -123,8 +123,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
         // force compaction
         StorageService.instance.forceKeyspaceCompaction(true, "test1");
         StorageService.instance.forceKeyspaceCompaction(true, "test2");
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(300L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*300L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(300L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*300L));
         assertThat(gaugest1.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test1.t1").getValue(), equalTo(1));
         assertThat(gaugest2.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test2.t2").getValue(), equalTo(1));
         
@@ -137,11 +137,11 @@ public class CompactionTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)", 100+j, "x", i);
             process(ConsistencyLevel.ONE,"insert into test2.t2 (a,b,c) VALUES (?,?,?)",100+j, "y", i);
         }
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(300L));
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(100L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(300L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(100L));
         
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*300L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(300L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*300L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(300L));
         
         StorageService.instance.forceKeyspaceFlush("test1");
         StorageService.instance.forceKeyspaceFlush("test2");
@@ -152,11 +152,11 @@ public class CompactionTests extends ESSingleNodeTestCase {
         assertThat(gaugest1.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test1.t1").getValue(), equalTo(1));
         assertThat(gaugest2.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test2.t2").getValue(), equalTo(1));
         
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(300L));
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(100L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(300L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(100L));
         
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*300L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(300L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*300L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(300L));
         
         // remove 100 docs
         for(int j=0 ; j < 100; j++) {
@@ -164,11 +164,11 @@ public class CompactionTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,"delete from test2.t2 WHERE a = ? and b = ?", 100+j, "x");
             process(ConsistencyLevel.ONE,"delete from test2.t2 WHERE a = ? and b = ?", 100+j, "y");
         }
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(200L));
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(200L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(0L));
 
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*200L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(200L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*200L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(200L));
 
         StorageService.instance.forceKeyspaceFlush("test1");
         StorageService.instance.forceKeyspaceFlush("test2");
@@ -177,11 +177,11 @@ public class CompactionTests extends ESSingleNodeTestCase {
         assertThat(gaugest1.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test1.t1").getValue(), equalTo(1));
         assertThat(gaugest2.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test2.t2").getValue(), equalTo(1));
         
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(200L));
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(200L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(0L));
         
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*200L));
-        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(200L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*200L));
+        assertThat(client().prepareSearch().setIndices("test2").setTypes("t2").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(200L));
     }
     
     @Test
@@ -209,7 +209,7 @@ public class CompactionTests extends ESSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
         StorageService.instance.forceKeyspaceFlush("test","t1");
         
         for(String s:gauges.keySet())
@@ -220,8 +220,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?) USING TTL 15", i, "y");
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(N));
         StorageService.instance.forceKeyspaceFlush("test","t1");
         Thread.sleep(2000);
         assertThat(gauges.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test.t1").getValue(), equalTo(2));
@@ -230,15 +230,15 @@ public class CompactionTests extends ESSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(3*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(N));
         StorageService.instance.forceKeyspaceFlush("test");
         assertThat(gauges.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test.t1").getValue(), equalTo(3));
         
         // force compaction
         StorageService.instance.forceKeyspaceCompaction(true, "test");
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(3*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(N));
         assertThat(gauges.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test.t1").getValue(), equalTo(1));
         
         for(String s:gauges.keySet())
@@ -247,8 +247,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         Thread.sleep(15*1000);  // wait TTL expiration
         Thread.sleep(20*1000);  // wait gc_grace_seconds expiration
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(3*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(N));
 
         StorageService.instance.forceKeyspaceFlush("test");
         StorageService.instance.forceKeyspaceCompaction(true, "test");
@@ -256,8 +256,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         UntypedResultSet rs = process(ConsistencyLevel.ONE,"SELECT * FROM test.t1");
         System.out.println("t1.count = "+rs.size());
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.queryStringQuery("b:y")).get().getHits().getTotalHits().value, equalTo(0L));
     }
     
     // gradle :core:test -Dtests.seed=C2C04213660E4546 -Dtests.class=org.elassandra.CompositeTests -Dtests.method="testReadBeforeWrite" -Dtests.security.manager=false -Dtests.locale=zh-TW -Dtests.timezone=Pacific/Pitcairn
@@ -290,7 +290,7 @@ public class CompactionTests extends ESSingleNodeTestCase {
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b,c) VALUES (?,?,?)", i, "b"+i, "c"+i);
         }
         StorageService.instance.forceKeyspaceFlush("test","t1");
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
         
         for(String s:gauges.keySet())
             System.out.println(s+"="+gauges.get(s).getValue());
@@ -300,22 +300,22 @@ public class CompactionTests extends ESSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?) USING TTL 15", i, "b"+i);
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b", "*")).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b", "*")).get().getHits().getTotalHits().value, equalTo(2*N));
         StorageService.instance.forceKeyspaceFlush("test","t1");
         assertThat(gauges.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test.t1").getValue(), equalTo(2));
         
         // force compaction
         StorageService.instance.forceKeyspaceCompaction(true, "test");
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits().value, equalTo(2*N));
         assertThat(gauges.get("org.apache.cassandra.metrics.Table.LiveSSTableCount.test.t1").getValue(), equalTo(1));
        
         Thread.sleep(15*1000);  // wait TTL expiration
         Thread.sleep(20*1000);  // wait gc_grace_seconds expiration
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits().value, equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits().value, equalTo(2*N));
 
         StorageService.instance.forceKeyspaceFlush("test");
         StorageService.instance.forceKeyspaceCompaction(true, "test");
@@ -323,8 +323,8 @@ public class CompactionTests extends ESSingleNodeTestCase {
         
         UntypedResultSet rs = process(ConsistencyLevel.ONE,"SELECT * FROM test.t1");
         System.out.println("t1.count = "+rs.size());
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits(), equalTo(N));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("c","*")).get().getHits().getTotalHits().value, equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.wildcardQuery("b","*")).get().getHits().getTotalHits().value, equalTo(N));
     }
 }

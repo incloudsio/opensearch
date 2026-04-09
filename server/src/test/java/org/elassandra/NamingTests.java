@@ -25,8 +25,6 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
-import java.util.Collections;
-
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -90,7 +88,7 @@ public class NamingTests extends ESSingleNodeTestCase {
 
         assertThat(client().admin().indices().preparePutTemplate("test_template")
                 .addMapping("_default_", mapping1)
-                .setPatterns(Collections.singletonList("test_index-*"))
+                .setPatterns(java.util.Collections.singletonList("test_index-*"))
                 .get().isAcknowledged(), equalTo(true));
 
         assertThat(client().prepareIndex("test_index-2016.12.29", "_doc", "1")
@@ -100,10 +98,7 @@ public class NamingTests extends ESSingleNodeTestCase {
 
         assertThat(client().prepareGet().setIndex("test_index-2016.12.29").setType("_doc").setId("1").get().isExists(), equalTo(true));
         assertThat(client().prepareMultiGet().add("test_index-2016.12.29","_doc","1").get().getResponses().length, equalTo(1));
-        assertThat(
-            client().prepareSearch("test_index-2016.12.29").setQuery(QueryBuilders.queryStringQuery("message:hello")).get().getHits().getTotalHits().value,
-            equalTo(1L)
-        );
+        assertThat(client().prepareSearch("test_index-2016.12.29").setTypes("_doc").setQuery(QueryBuilders.queryStringQuery("message:hello")).get().getHits().getTotalHits().value, equalTo(1L));
         assertThat(client().prepareDelete().setIndex("test_index-2016.12.29").setType("_doc").setId("1").get().getId(), equalTo("1"));
         assertThat(client().admin().indices().prepareDelete("test_index-2016.12.29").get().isAcknowledged(), equalTo(true));
         assertThat(client().admin().indices().prepareDeleteTemplate("test_template").get().isAcknowledged(), equalTo(true));
@@ -138,6 +133,6 @@ public class NamingTests extends ESSingleNodeTestCase {
         createIndex("test2");
         ensureGreen("test2");
         assertThat(client().prepareIndex("test2","_doc","1").setSource("{\"top\":\"secret\"}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
-        assertThat(client().prepareSearch("test2").setTypes("_doc").setQuery(QueryBuilders.existsQuery("top")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch("test2").setTypes("_doc").setQuery(QueryBuilders.existsQuery("top")).get().getHits().getTotalHits().value, equalTo(1L));
     }
 }

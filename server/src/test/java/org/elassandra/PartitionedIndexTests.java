@@ -70,7 +70,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
 
         for(long i=20; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(i));
 
         // test index delete #286
         for(long i=25; i < 30; i++) {
@@ -105,7 +105,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
 
         for(long i=20; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(i));
     }
 
     @Test
@@ -131,7 +131,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
 
         for(long i=1; i < 12; i++) {
             String indexName = String.format(Locale.ROOT, "mms_dev_logs-2020.%02d", i);
-            assertThat(client().prepareSearch().setIndices(indexName).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(10L));
+            assertThat(client().prepareSearch().setIndices(indexName).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(10L));
         }
     }
 
@@ -167,7 +167,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
 
         for(long i=20; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(i));
     }
 
     @Test
@@ -195,8 +195,8 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         .setSource("{\"content\": \"ouais\", \"num\": 201, \"conversation\": \"Lisa\", \"author\": \"Barth\", \"date\": 1469968740000, \"recipients\": [\"Lisa\"]}", XContentType.JSON)
         .get();
 
-        assertThat(client().prepareSearch().setIndices("fb").setTypes("messages").get().getHits().getTotalHits(), equalTo(1L));
-        assertThat(client().prepareSearch().setIndices("fb2").setTypes("messages").get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("fb").setTypes("messages").get().getHits().getTotalHits().value, equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("fb2").setTypes("messages").get().getHits().getTotalHits().value, equalTo(1L));
     }
 
     @Test
@@ -220,7 +220,7 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
 
         for(long i=20; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(i));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(i));
 
         // add a doc with new field in ks_25
         assertEquals(client().prepareIndex("ks_25", "t1","xx")
@@ -236,9 +236,9 @@ public class PartitionedIndexTests extends ESSingleNodeTestCase {
         }
 
         // check the doc is inserted in ks_20 and not in the others
-        assertThat(client().prepareSearch().setIndices("ks_"+20).setTypes("t1").setQuery(QueryBuilders.termQuery("content", "ouais")).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("ks_"+20).setTypes("t1").setQuery(QueryBuilders.termQuery("content", "ouais")).get().getHits().getTotalHits().value, equalTo(1L));
         for(long i=21; i < 30; i++)
-            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.termQuery("content", "ouais")).get().getHits().getTotalHits(), equalTo(0L));
+            assertThat(client().prepareSearch().setIndices("ks_"+i).setTypes("t1").setQuery(QueryBuilders.termQuery("content", "ouais")).get().getHits().getTotalHits().value, equalTo(0L));
 
         // check tables extensions indexMetaData has only mappings for the virtual index
         UntypedResultSet rs = process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "SELECT extensions FROM system_schema.tables WHERE keyspace_name='ks' AND table_name='t1'"));

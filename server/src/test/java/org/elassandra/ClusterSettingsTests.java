@@ -15,13 +15,11 @@
  */
 package org.elassandra;
 
-import org.opensearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
-import static org.apache.lucene.util.LuceneTestCase.expectThrows;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 
 /**
@@ -49,10 +47,9 @@ public class ClusterSettingsTests extends ESSingleNodeTestCase {
         super.tearDown();
     }
     
-    @Test
+    @Test(expected = org.apache.cassandra.exceptions.ConfigurationException.class)
     public void testIndexBadSearchStrategy() {
-        CreateIndexRequestBuilder createIndexRequestBuilder = client().admin().indices().prepareCreate("test1");
-        expectThrows(org.apache.cassandra.exceptions.ConfigurationException.class, createIndexRequestBuilder::get);
+        client().admin().indices().prepareCreate("test1").get();
     }
     
 }

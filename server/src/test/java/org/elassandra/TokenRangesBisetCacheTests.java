@@ -91,10 +91,7 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
         assertThat(lower, lessThan(nbHits));
 
         assertThat(lower+upper, equalTo(nbHits));
-        assertThat(
-            client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value,
-            equalTo(N)
-        );
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
     }
 
 }

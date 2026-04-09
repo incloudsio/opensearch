@@ -77,7 +77,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
     private final ShardShuffler shuffler;
 
     // TODO: set time of outage for unassigned shards.
-    final public static UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(
+    final public static  UnassignedInfo UNASSIGNED_INFO_NODE_LEFT = new UnassignedInfo(
         UnassignedInfo.Reason.ALLOCATION_FAILED,
         "cassandra node left",
         null,
@@ -86,9 +86,9 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         System.currentTimeMillis(),
         false,
         AllocationStatus.DECIDERS_NO,
-        Collections.emptySet()
+        java.util.Collections.emptySet()
     );
-    final public static UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(
+    final public static  UnassignedInfo UNASSIGNED_INFO_UNAVAILABLE = new UnassignedInfo(
         UnassignedInfo.Reason.ALLOCATION_FAILED,
         "shard or keyspace unavailable",
         null,
@@ -97,7 +97,7 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
         System.currentTimeMillis(),
         false,
         AllocationStatus.DECIDERS_NO,
-        Collections.emptySet()
+        java.util.Collections.emptySet()
     );
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_CREATED = new UnassignedInfo(UnassignedInfo.Reason.INDEX_CREATED, null);
     final public static  UnassignedInfo UNASSIGNED_INFO_INDEX_REOPEN = new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null);
@@ -458,11 +458,9 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
             return initializeEmpty(indexMetaData, new UnassignedInfo(UnassignedInfo.Reason.INDEX_REOPENED, null));
         }
 
-        /**
-         * Initializes a new empty index, as as a result of closing an opened index.
-         */
-        public Builder initializeAsFromOpenToClose(IndexMetadata indexMetadata) {
-            return initializeEmpty(indexMetadata, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CLOSED, null));
+        /** Routing shards when closing an open index (OpenSearch {@code MetadataIndexStateService}). */
+        public Builder initializeAsFromOpenToClose(IndexMetadata indexMetaData) {
+            return initializeEmpty(indexMetaData, new UnassignedInfo(UnassignedInfo.Reason.INDEX_CLOSED, null));
         }
 
         /**
@@ -639,9 +637,9 @@ public class IndexRoutingTable extends AbstractDiffable<IndexRoutingTable> imple
 
         for (IndexShardRoutingTable indexShard : ordered) {
             sb.append("----shard_id [").append(indexShard.shardId().getIndex().getName()).append("][").append(indexShard.shardId().id())
-            .append("][")
-            .append(indexShard.primaryShard().tokenRanges())
-            .append("]\n");
+                .append("][")
+                .append(indexShard.primaryShard() != null ? indexShard.primaryShard().tokenRanges() : "")
+                .append("]\n");
             for (ShardRouting shard : indexShard) {
                 sb.append("--------").append(shard.shortSummary()).append("\n");
             }

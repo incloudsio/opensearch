@@ -136,7 +136,7 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         
         
         // ensure elasticsearch can query this records
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2L));
         resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("1").get();
         assertTrue(resp.isExists());
         assertTrue(resp.getSource().isEmpty());
@@ -159,7 +159,7 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         assertThat(rs.one().getList("new_field", UTF8Type.instance), is(Collections.singletonList("test")));
     
         // check we got the appropriate extra field in elasticsearch
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(3L));
         resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("3").get();
         assertTrue(resp.isExists());
         assertThat(resp.getSource().size(), equalTo(1));
@@ -245,7 +245,7 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         
         // ensure elasticsearch can query this records
         // check for spaces between fields in PK
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2L));
         resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"1\", \"11\", \"111\"]").get();
         assertTrue(resp.isExists());
         assertTrue(resp.getSource().isEmpty());
@@ -279,7 +279,7 @@ public class PkOnlyTests extends ESSingleNodeTestCase {
         assertThat(rs.one().getList("new_field", UTF8Type.instance), is(Collections.singletonList("test")));
         
         // check we got the appropriate extra field in elasticsearch
-        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(3L));
+        assertThat(client().prepareSearch().setIndices("test1").setTypes("pk_only").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(3L));
         resp = client().prepareGet().setIndex("test1").setType("pk_only").setId("[\"3\", \"33\", \"333\"]").get();
         assertTrue(resp.isExists());
         assertThat(resp.getId(), equalTo("[\"3\",\"33\",\"333\"]"));

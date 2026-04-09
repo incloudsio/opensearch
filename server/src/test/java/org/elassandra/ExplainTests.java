@@ -57,7 +57,7 @@ public class ExplainTests extends ESSingleNodeTestCase {
         long N = 10;
         for(int i=0; i < N; i++)
             process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id, f1) VALUES ('%d',%d)", i,i));
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("f1", 1)).get().getHits().getTotalHits(), equalTo(1L));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("f1", 1)).get().getHits().getTotalHits().value, equalTo(1L));
         assertThat(client().prepareExplain("test", "t1", "1").setQuery(QueryBuilders.termQuery("f1", 1)).get().hasExplanation(), equalTo(true));
     }
 }

@@ -1,9 +1,9 @@
 package org.elassandra;
 
-import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.ColumnSpecification;
-import org.apache.cassandra.cql3.QueryHandler;
+import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.QueryOptions;
+import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.DoubleType;
@@ -95,20 +95,10 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
         // message payload with protocol v4
         Long writetime = new Long(0);
         ByteBuffer buffer = UTF8Type.instance.decompose(esQuery);
-        QueryOptions queryOptions = QueryOptions.create(
-            ConsistencyLevel.ONE,
-            Collections.singletonList(buffer),
-            false,
-            5000,
-            null,
-            null,
-            ProtocolVersion.V4,
-            null
-        );
-        QueryState queryState = new QueryState(ClientState.forInternalCalls());
-        QueryHandler handler = ClientState.getCQLQueryHandler();
-        CQLStatement stmt = handler.parse("SELECT * FROM test.foo WHERE es_query=?", queryState, queryOptions);
-        ResultMessage message = handler.process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
+        QueryOptions queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 5000, null, null, ProtocolVersion.V4, null);
+        QueryState queryState = new QueryState( ClientState.forInternalCalls());
+        CQLStatement stmt = QueryProcessor.instance.parse("SELECT * FROM test.foo WHERE es_query=?", queryState, queryOptions);
+        ResultMessage message = ClientState.getCQLQueryHandler().process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
         ElasticIncomingPayload payloadInfo = new ElasticIncomingPayload(message.getCustomPayload());
         assertThat(payloadInfo.hitTotal, equalTo(100L));
         assertThat(payloadInfo.shardSuccessful, equalTo(1));
@@ -117,8 +107,8 @@ public class CqlHandlerTests extends ESSingleNodeTestCase {
 
         // page size = 75
         queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 75, null, null, ProtocolVersion.V4, null);
-        stmt = handler.parse("SELECT * FROM test.foo WHERE es_query=? LIMIT 1000", queryState, queryOptions);
-        message = handler.process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
+        stmt = QueryProcessor.instance.parse("SELECT * FROM test.foo WHERE es_query=? LIMIT 1000", queryState, queryOptions);
+        message = ClientState.getCQLQueryHandler().process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
         rs = UntypedResultSet.create(((ResultMessage.Rows) message).result);
         assertThat(rs.size(), equalTo(75));
     }

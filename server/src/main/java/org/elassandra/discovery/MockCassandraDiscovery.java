@@ -1,18 +1,14 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * Elassandra: mock Cassandra discovery for tests (ported from Elasticsearch 6.8 fork).
- * Lives in server so {@link org.opensearch.discovery.DiscoveryModule} can construct it when
- * {@code discovery.type} is {@value #MOCK_CASSANDRA}.
+ * Test-oriented Cassandra discovery mock; production code lives in {@code org.elasticsearch.test.discovery}
+ * for ES 6.8. For OpenSearch side-car builds, this copy is placed under {@code org.elassandra.discovery} so
+ * {@link org.opensearch.discovery.DiscoveryModule} can wire {@code discovery.type: mock-cassandra} without
+ * pulling test-framework jars into {@code :server:compileJava}.
  */
-
 package org.elassandra.discovery;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.opensearch.action.ActionListener;
 import org.opensearch.cluster.ClusterChangedEvent;
-import org.opensearch.cluster.coordination.ClusterStatePublisher;
+import org.opensearch.cluster.coordination.ClusterStatePublisher.AckListener;
 import org.opensearch.cluster.service.ClusterApplier;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.cluster.service.MasterService;
@@ -24,17 +20,12 @@ import org.opensearch.transport.TransportService;
 
 import java.util.function.Consumer;
 
-/**
- * Subclass of {@link CassandraDiscovery} that allows tests to wrap publish/resubmit.
- */
 public class MockCassandraDiscovery extends CassandraDiscovery {
 
     public static final String MOCK_CASSANDRA = "mock-cassandra";
 
-    protected final Logger logger = LogManager.getLogger(MockCassandraDiscovery.class);
-
-    Consumer<ClusterChangedEvent> publishFunc;
-    Consumer<ClusterChangedEvent> resumitFunc;
+    private Consumer<ClusterChangedEvent> publishFunc;
+    private Consumer<ClusterChangedEvent> resumitFunc;
 
     public MockCassandraDiscovery(
         Settings settings,
@@ -60,7 +51,7 @@ public class MockCassandraDiscovery extends CassandraDiscovery {
     public void publish(
         final ClusterChangedEvent clusterChangedEvent,
         final ActionListener<Void> publishListener,
-        final ClusterStatePublisher.AckListener ackListener
+        final AckListener ackListener
     ) {
         if (this.publishFunc != null) {
             this.publishFunc.accept(clusterChangedEvent);
@@ -76,10 +67,13 @@ public class MockCassandraDiscovery extends CassandraDiscovery {
         super.resubmitTaskOnNextChange(clusterChangedEvent);
     }
 
-    /** Marker plugin loaded by Elassandra single-node tests ({@code org.opensearch.test.ESSingleNodeTestCase}). */
+    /**
+     * Forces {@code discovery.type} for single-node tests; production wiring is {@link org.opensearch.discovery.DiscoveryModule}.
+     */
     public static class TestPlugin extends Plugin {
-        public TestPlugin(Settings settings) {
-            // reserved for future wiring
+        @Override
+        public Settings additionalSettings() {
+            return Settings.builder().put("discovery.type", MOCK_CASSANDRA).build();
         }
     }
 }

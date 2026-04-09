@@ -151,7 +151,7 @@ public class RangeFieldTests extends ESSingleNodeTestCase {
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
         assertThat(client().prepareSearch().setIndices(indexName).setTypes("my_type")
-                .setQuery(getMiddleQuery(type)).get().getHits().getTotalHits(), equalTo(1L));
+                .setQuery(getMiddleQuery(type)).get().getHits().getTotalHits().value, equalTo(1L));
     }
 
 }

@@ -1,24 +1,26 @@
+/*
+ * OpenSearch 1.3 side-car stub: stock FetchPhase has no ClusterService ctor or CQL hooks yet.
+ * Full Elassandra CQL fetch lives in the ES 6.8 fork under org.elasticsearch.search.fetch.CqlFetchPhase.
+ */
 package org.opensearch.search.fetch;
 
 import org.opensearch.cluster.service.ClusterService;
 
 import java.util.List;
 
-/**
- * Elassandra: CQL-backed fetch (legacy ES path). OpenSearch 1.x {@link FetchPhase} has no CQL hooks;
- * this subclass preserves the type and {@link #PROJECTION} for callers until the port wires fetch properly.
- */
+@SuppressWarnings("unused")
 public class CqlFetchPhase extends FetchPhase {
 
     public static final String PROJECTION = "_projection";
 
-    public CqlFetchPhase(List<FetchSubPhase> fetchSubPhases) {
+    private final ClusterService clusterService;
+
+    public CqlFetchPhase(List<FetchSubPhase> fetchSubPhases, ClusterService clusterService) {
         super(fetchSubPhases);
+        this.clusterService = clusterService;
     }
 
-    /** @deprecated OpenSearch {@link FetchPhase} does not take ClusterService; parameter ignored for DI compatibility. */
-    @Deprecated
-    public CqlFetchPhase(List<FetchSubPhase> fetchSubPhases, ClusterService clusterService) {
-        this(fetchSubPhases);
+    public ClusterService clusterService() {
+        return clusterService;
     }
 }

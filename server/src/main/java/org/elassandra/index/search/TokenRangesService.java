@@ -18,6 +18,7 @@ import org.elassandra.index.mapper.internal.TokenFieldMapper;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.mapper.NumberFieldMapper;
 
 import java.util.Collection;
 import java.util.Queue;
@@ -74,7 +75,7 @@ public class TokenRangesService {
 
                     if (unique_range.left.equals(unique_range.right)) {
                         // partition key search, not cached.
-                        return LongPoint.newExactQuery(TokenFieldMapper.NAME, (Long) unique_range.left.getTokenValue());
+                        return NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME,unique_range.left);
                     }
                     tokenRangesQuery = tokenRangesQueryCache.getIfPresent(tokenRanges);
                     if (tokenRangesQuery == null) {
@@ -111,9 +112,12 @@ public class TokenRangesService {
         Long left = (Long) range.left.getTokenValue();
         Long right = (Long) range.right.getTokenValue();
         if (left.equals(right)) {
-            return LongPoint.newExactQuery(TokenFieldMapper.NAME, left);
+            return NumberFieldMapper.NumberType.LONG.termQuery(TokenFieldMapper.NAME, left);
         }
-        return LongPoint.newRangeQuery(TokenFieldMapper.NAME, left, right);
+        // OpenSearch 1.3 NumberType#rangeQuery requires QueryShardContext; use Lucene points (token field is long).
+        long lo = left == Long.MIN_VALUE ? Long.MIN_VALUE : left;
+        long hi = right == Long.MAX_VALUE ? Long.MAX_VALUE : right;
+        return LongPoint.newRangeQuery(TokenFieldMapper.NAME, lo, hi);
     }
 
     public static boolean tokenRangesIntersec(Collection<Range<Token>> shardTokenRanges, Range<Token> requestTokenRange) {

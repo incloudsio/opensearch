@@ -19,12 +19,15 @@
 
 package org.elassandra.env;
 
+import org.opensearch.cli.Terminal;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.env.Environment;
 import org.opensearch.node.InternalSettingsPreparer;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.Map;
 
 /**
  * Elasticsearch file configuration loader interface.
@@ -32,12 +35,48 @@ import java.util.Collections;
 public interface EnvironmentLoader {
 
     default Environment loadEnvironment(boolean foreground, String homeDir, String configDir) {
-        return InternalSettingsPreparer.prepareEnvironment(
-            Settings.builder().put("node.name", "node0").put("path.home", homeDir).build(),
-            Collections.emptyMap(),
-            Paths.get(configDir),
-            () -> "node0"
-        );
+        final Settings settings = Settings.builder()
+            .put("node.name", "node0")
+            .put("path.home", homeDir)
+            .build();
+        final Path cfg = Paths.get(configDir);
+        try {
+            java.lang.reflect.Method m = InternalSettingsPreparer.class.getMethod(
+                "prepareEnvironment",
+                Settings.class,
+                Map.class,
+                Path.class,
+                java.util.function.Supplier.class
+            );
+            return (Environment) m.invoke(
+                null,
+                settings,
+                Collections.<String, String>emptyMap(),
+                cfg,
+                (java.util.function.Supplier<String>) () -> "node0"
+            );
+        } catch (NoSuchMethodException e) {
+            try {
+                java.lang.reflect.Method m2 = InternalSettingsPreparer.class.getMethod(
+                    "prepareEnvironment",
+                    Settings.class,
+                    Terminal.class,
+                    Map.class,
+                    Path.class
+                );
+                return (Environment) m2.invoke(
+                    null,
+                    settings,
+                    foreground ? Terminal.DEFAULT : null,
+                    Collections.<String, String>emptyMap(),
+                    cfg
+                );
+            } catch (ReflectiveOperationException e2) {
+                throw new RuntimeException(e2);
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }

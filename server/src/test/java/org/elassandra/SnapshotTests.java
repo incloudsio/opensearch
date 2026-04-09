@@ -96,14 +96,14 @@ public class SnapshotTests extends ESSingleNodeTestCase {
 
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(1000L));
 
         // take snaphot
         StorageService.instance.takeSnapshot("snap1", "ks");
 
         // drop all
         process(ConsistencyLevel.ONE,"TRUNCATE ks.t1");
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(0L));
 
         // close index and restore SSTable+Lucene files
         assertAcked(client().admin().indices().prepareClose("ks").get());
@@ -117,7 +117,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareOpen("ks").get());
         ensureGreen("ks");
 
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(1000L));
     }
 
     @Test
@@ -133,7 +133,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
 
         for(long i=0; i < 1000; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(1000L));
 
         UUID cfId = Schema.instance.getTableMetadata("ks","t1").id.asUUID();
         String id = cfId.toString().replaceAll("\\-", "");
@@ -151,7 +151,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         ensureGreen("ks");
         Index index2 = resolveIndex("ks");
 
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(0L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(0L));
 
         // close index and restore SSTable+Lucene files
         assertAcked(client().admin().indices().prepareClose("ks").get());
@@ -173,7 +173,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         ensureGreen("ks");
 
         Thread.sleep(3000);
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(1000L));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(1000L));
     }
 
     @Test
@@ -189,7 +189,7 @@ public class SnapshotTests extends ESSingleNodeTestCase {
         int N = 10;
         for(long i=0; i < N; i++)
            process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "INSERT INTO ks.t1 (name, age) VALUES ('name%d', %d)",i,i));
-        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo((long)N));
+        assertThat(client().prepareSearch().setIndices("ks").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo((long)N));
 
         assertAcked(client().admin().indices().prepareDelete("ks").get());
         UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM ks.t1");

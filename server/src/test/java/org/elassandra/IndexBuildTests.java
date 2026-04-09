@@ -66,7 +66,7 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
 
         // close index
         assertAcked(client().admin().indices().prepareClose("test").get());
@@ -82,12 +82,12 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().prepareOpen("test").get());
         ensureGreen("test");
 
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
 
         // rebuild_index
         StorageService.instance.rebuildSecondaryIndex(3, "test", "t1", "elastic_t1_idx");
         assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(2*N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
     }
 
     @Test
@@ -106,7 +106,7 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
         assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
 
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
     }
 
     @Test
@@ -140,6 +140,6 @@ public class IndexBuildTests extends ESSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
 
         assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits(), equalTo(N));
+        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
     }
 }

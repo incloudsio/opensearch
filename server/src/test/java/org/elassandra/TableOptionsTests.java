@@ -106,7 +106,7 @@ public class TableOptionsTests extends ESSingleNodeTestCase {
         assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
         
         SearchResponse resp2 = client().prepareSearch().setIndices("test2").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp2.getHits().getTotalHits(), equalTo(1L));
+        assertThat(resp2.getHits().getTotalHits().value, equalTo(1L));
         
         try {
             process(ConsistencyLevel.ONE,"ALTER TABLE test.my_type DROP b");

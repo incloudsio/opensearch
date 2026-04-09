@@ -12,11 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Side-car overlay: OpenSearch 1.3 GatewayService ctor uses Discovery (not GatewayMetaState/IndicesService); gateway()
+ * is not exposed — keep a local Gateway for Elassandra recovery hook.
  */
 package org.elassandra.gateway;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateUpdateTask;
 import org.opensearch.cluster.block.ClusterBlock;
@@ -40,13 +41,15 @@ import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CassandraGatewayService extends GatewayService {
-    final Logger logger = LogManager.getLogger(getClass());
+    final org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger(getClass());
 
     public static final ClusterBlock NO_CASSANDRA_RING_BLOCK = new ClusterBlock(12, "no cassandra ring", true, true, true, RestStatus.SERVICE_UNAVAILABLE, EnumSet.of(ClusterBlockLevel.READ));
 
     private final ClusterService clusterService;
 
     private final AtomicBoolean recovered = new AtomicBoolean();
+
+    private final Gateway gateway;
 
     @Inject
     public CassandraGatewayService(
@@ -59,6 +62,7 @@ public class CassandraGatewayService extends GatewayService {
     ) {
         super(settings, allocationService, clusterService, threadPool, listGatewayMetaState, discovery);
         this.clusterService = clusterService;
+        this.gateway = new Gateway(settings, clusterService, listGatewayMetaState);
     }
 
     /**
@@ -99,6 +103,12 @@ public class CassandraGatewayService extends GatewayService {
         });
     }
 
+    @Override
+    protected void performStateRecovery(boolean enforceRecoverAfterTime, String reason) {
+        final Gateway.GatewayStateRecoveredListener recoveryListener = new GatewayRecoveryListener();
+        gateway.performStateRecovery(recoveryListener);
+    }
+
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {
 
         @Override
@@ -109,9 +119,9 @@ public class CassandraGatewayService extends GatewayService {
                 public ClusterState execute(ClusterState currentState) {
                     // remove the block, since we recovered from gateway
                     ClusterBlocks.Builder blocks = ClusterBlocks.builder()
-                            .blocks(currentState.blocks())
-                            .blocks(recoveredState.blocks())
-                            .removeGlobalBlock(STATE_NOT_RECOVERED_BLOCK);
+                        .blocks(currentState.blocks())
+                        .blocks(recoveredState.blocks())
+                        .removeGlobalBlock(STATE_NOT_RECOVERED_BLOCK);
 
                     Metadata.Builder metaDataBuilder = Metadata.builder(recoveredState.metadata());
                     // automatically generate a UID for the metadata if we need to
@@ -127,10 +137,7 @@ public class CassandraGatewayService extends GatewayService {
                     }
 
                     // update the state to reflect the new metadata and routing
-                    ClusterState updatedState = ClusterState.builder(currentState)
-                            .blocks(blocks)
-                            .metadata(metaDataBuilder)
-                            .build();
+                    ClusterState updatedState = ClusterState.builder(currentState).blocks(blocks).metadata(metaDataBuilder).build();
                     RoutingTable newRoutingTable = RoutingTable.build(CassandraGatewayService.this.clusterService, updatedState);
                     return ClusterState.builder(updatedState).routingTable(newRoutingTable).build();
                 }
@@ -143,8 +150,7 @@ public class CassandraGatewayService extends GatewayService {
 
                 @Override
                 public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
-                    logger.info("Recovered [{}] indices into cluster_state metadata={}/{}",
-                            newState.metadata().indices().size(), newState.metadata().clusterUUID(), newState.metadata().version());
+                    logger.info("Recovered [{}] indices into cluster_state metadata={}/{}", newState.metadata().indices().size(), newState.metadata().clusterUUID(), newState.metadata().version());
                 }
             });
         }

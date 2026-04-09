@@ -6,7 +6,6 @@ package org.elassandra.index;
 
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.lucene.search.Query;
-import org.opensearch.LegacyESVersion;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.index.IndexService;
@@ -264,7 +263,42 @@ public final class ElassandraSecondaryIndexCompat {
         }
     }
 
-    /** Nested doc ordering: fork uses Version.V_6_5_0; OpenSearch uses LegacyESVersion.V_6_5_0 when present. */
+    public static boolean indexVersionOnOrAfter600Beta1(IndexSettings settings) {
+        try {
+            Class<?> legacy = Class.forName("org.opensearch.LegacyESVersion");
+            Object marker = legacy.getField("V_6_0_0_beta1").get(null);
+            Object vCreated = settings.getIndexVersionCreated();
+            return (Boolean) vCreated.getClass().getMethod("onOrAfter", legacy).invoke(vCreated, marker);
+        } catch (Exception e) {
+            try {
+                Class<?> ver = Class.forName("org.opensearch.Version");
+                Object marker = ver.getField("V_6_0_0_beta1").get(null);
+                Object vCreated = settings.getIndexVersionCreated();
+                return (Boolean) vCreated.getClass().getMethod("onOrAfter", ver).invoke(vCreated, marker);
+            } catch (Exception e2) {
+                return true;
+            }
+        }
+    }
+
+    public static boolean mappedFieldTypeIsSearchable(MappedFieldType fieldType) {
+        try {
+            Method m = fieldType.getClass().getMethod("isSearchable");
+            return (Boolean) m.invoke(fieldType);
+        } catch (Exception e) {
+            try {
+                Method im = fieldType.getClass().getMethod("indexOptions");
+                Object opts = im.invoke(fieldType);
+                Class<?> indexOptionsClass = Class.forName("org.apache.lucene.index.IndexOptions");
+                Object none = indexOptionsClass.getField("NONE").get(null);
+                return opts != null && !opts.equals(none);
+            } catch (Exception e2) {
+                return true;
+            }
+        }
+    }
+
+    /** Nested doc ordering: OpenSearch uses LegacyESVersion; ES 6.8 uses Version (both via reflection for one source tree). */
     public static boolean indexVersionOnOrAfter65(IndexSettings settings) {
         try {
             Class<?> legacy = Class.forName("org.opensearch.LegacyESVersion");
@@ -272,7 +306,14 @@ public final class ElassandraSecondaryIndexCompat {
             Object vCreated = settings.getIndexVersionCreated();
             return (Boolean) vCreated.getClass().getMethod("onOrAfter", legacy).invoke(vCreated, v65);
         } catch (Exception e) {
-            return settings.getIndexVersionCreated().onOrAfter(LegacyESVersion.V_6_5_0);
+            try {
+                Class<?> ver = Class.forName("org.opensearch.Version");
+                Object v65 = ver.getField("V_6_5_0").get(null);
+                Object vCreated = settings.getIndexVersionCreated();
+                return (Boolean) vCreated.getClass().getMethod("onOrAfter", ver).invoke(vCreated, v65);
+            } catch (Exception e2) {
+                return false;
+            }
         }
     }
 }

@@ -29,7 +29,6 @@ import org.opensearch.cluster.Diffable;
 import org.opensearch.cluster.DiffableUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
-import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;
 import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
@@ -182,7 +181,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
         return shards;
     }
 
-    /** Count shards matching a predicate (OpenSearch API; used by {@link UnassignedInfo}). */
+    /** Count shards matching a predicate (OpenSearch 1.3+ API; used by {@code UnassignedInfo}). */
     public int shardsMatchingPredicateCount(Predicate<ShardRouting> predicate) {
         int count = 0;
         for (ShardRouting shard : allShards()) {
@@ -198,7 +197,7 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
      */
     public boolean isLocalShardsStarted() {
         for (IndexRoutingTable indexRoutingTable : this) {
-            IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shards().get(0);
+            IndexShardRoutingTable indexShardRoutingTable = indexRoutingTable.shard(0);
             if (indexShardRoutingTable != null && indexShardRoutingTable.primaryShard() != null) {
                 switch (indexShardRoutingTable.primaryShard().state()) {
                 case UNASSIGNED:
@@ -657,11 +656,9 @@ public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<Routi
             return this;
         }
 
-        public Builder addAsFromOpenToClose(IndexMetadata indexMetadata) {
-            assert isIndexVerifiedBeforeClosed(indexMetadata);
-            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsFromOpenToClose(
-                indexMetadata
-            );
+        public Builder addAsFromOpenToClose(IndexMetadata indexMetaData) {
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetaData.getIndex())
+                    .initializeAsFromOpenToClose(indexMetaData);
             return add(indexRoutingBuilder);
         }
 
