@@ -42,7 +42,11 @@ import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.RerouteService;
 import org.opensearch.cluster.routing.allocation.AllocationService;
 import org.opensearch.cluster.service.ClusterApplier;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.cluster.service.MasterService;
+import org.elassandra.discovery.CassandraDiscovery;
+import org.elassandra.discovery.CassandraDiscoveryPlugin;
+import org.elassandra.discovery.MockCassandraDiscovery;
 import org.opensearch.common.Randomness;
 import org.opensearch.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.common.network.NetworkService;
@@ -123,6 +127,7 @@ public class DiscoveryModule {
         TransportService transportService,
         NamedWriteableRegistry namedWriteableRegistry,
         NetworkService networkService,
+        ClusterService clusterService,
         MasterService masterService,
         ClusterApplier clusterApplier,
         ClusterSettings clusterSettings,
@@ -208,6 +213,26 @@ public class DiscoveryModule {
                 rerouteService,
                 electionStrategy,
                 nodeHealthService
+            );
+        } else if (CassandraDiscoveryPlugin.CASSANDRA.equals(discoveryType)) {
+            discovery = new CassandraDiscovery(
+                settings,
+                transportService,
+                masterService,
+                clusterService,
+                clusterApplier,
+                clusterSettings,
+                namedWriteableRegistry
+            );
+        } else if (MockCassandraDiscovery.MOCK_CASSANDRA.equals(discoveryType)) {
+            discovery = new MockCassandraDiscovery(
+                settings,
+                transportService,
+                masterService,
+                clusterService,
+                clusterApplier,
+                clusterSettings,
+                namedWriteableRegistry
             );
         } else if (Assertions.ENABLED && ZEN_DISCOVERY_TYPE.equals(discoveryType)) {
             discovery = new ZenDiscovery(

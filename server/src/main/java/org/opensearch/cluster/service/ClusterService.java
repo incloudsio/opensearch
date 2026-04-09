@@ -34,6 +34,11 @@ package org.opensearch.cluster.service;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.Schema;
+import org.elassandra.discovery.CassandraDiscovery;
+import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateApplier;
@@ -51,7 +56,9 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Setting.Property;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexingPressureService;
+import org.opensearch.indices.IndicesService;
 import org.opensearch.node.Node;
 import org.opensearch.threadpool.ThreadPool;
 
@@ -94,6 +101,12 @@ public class ClusterService extends AbstractLifecycleComponent {
 
     private IndexingPressureService indexingPressureService;
 
+    private volatile IndicesService indicesService;
+
+    private volatile CassandraDiscovery cassandraDiscovery;
+
+    private final CassandraShardStartedBarrier cassandraShardStartedBarrier;
+
     public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool) {
         this(
             settings,
@@ -118,6 +131,7 @@ public class ClusterService extends AbstractLifecycleComponent {
         // Add a no-op update consumer so changes are logged
         this.clusterSettings.addAffixUpdateConsumer(USER_DEFINED_METADATA, (first, second) -> {}, (first, second) -> {});
         this.clusterApplierService = clusterApplierService;
+        this.cassandraShardStartedBarrier = new CassandraShardStartedBarrier(settings, this);
     }
 
     public synchronized void setNodeConnectionsService(NodeConnectionsService nodeConnectionsService) {
@@ -355,14 +369,21 @@ public class ClusterService extends AbstractLifecycleComponent {
     }
 
     public void setDiscovery(org.opensearch.discovery.Discovery discovery) {
+        if (discovery instanceof CassandraDiscovery) {
+            this.cassandraDiscovery = (CassandraDiscovery) discovery;
+        }
     }
 
-    public org.opensearch.indices.IndicesService getIndicesService() {
-        return null;
+    public void setIndicesService(IndicesService indicesService) {
+        this.indicesService = indicesService;
     }
 
-    public org.opensearch.index.IndexService indexServiceSafe(org.opensearch.index.Index index) {
-        return null;
+    public IndicesService getIndicesService() {
+        return indicesService;
+    }
+
+    public IndexService indexServiceSafe(org.opensearch.index.Index index) {
+        return indicesService.indexServiceSafe(index);
     }
 
     public org.elassandra.cluster.SchemaManager getSchemaManager() {
@@ -394,6 +415,27 @@ public class ClusterService extends AbstractLifecycleComponent {
 
     /** Elassandra admin metadata CQL table name (matches ES fork {@code ELASTIC_ADMIN_METADATA_TABLE}). */
     public static final String ELASTIC_ADMIN_METADATA_TABLE = "metadata_log";
+
+    /** Cluster name derived from Cassandra and optional {@code datacenter.group} (fork parity). */
+    public static String getElasticsearchClusterName(Settings settings) {
+        String clusterName = DatabaseDescriptor.getClusterName();
+        String datacenterGroup = settings.get("datacenter.group");
+        if (datacenterGroup != null && datacenterGroup.length() > 0) {
+            clusterName = DatabaseDescriptor.getClusterName() + "@" + datacenterGroup.trim();
+        }
+        return clusterName;
+    }
+
+    /** True when the elastic_admin metadata CQL table exists (fork parity). */
+    public boolean hasMetaDataTable() {
+        KeyspaceMetadata ksm = Schema.instance.getKeyspaceMetadata(getElasticAdminKeyspaceName());
+        return ksm != null && ksm.getTableOrViewNullable(ELASTIC_ADMIN_METADATA_TABLE) != null;
+    }
+
+    /** Block until local shards are started ({@link CassandraShardStartedBarrier}). */
+    public void blockUntilShardsStarted() {
+        cassandraShardStartedBarrier.blockUntilShardsStarted();
+    }
 
     /**
      * Merge per-table index metadata extensions into the cluster metadata builder (Elassandra fork parity).
@@ -542,9 +584,9 @@ public class ClusterService extends AbstractLifecycleComponent {
         return process(cl, query, values);
     }
 
-    /** Elassandra: access Cassandra discovery from tests (fork parity; side-car may return null). */
-    public org.elassandra.discovery.CassandraDiscovery getCassandraDiscovery() {
-        return null;
+    /** Elassandra: access Cassandra discovery from tests (fork parity). */
+    public CassandraDiscovery getCassandraDiscovery() {
+        return cassandraDiscovery;
     }
 
     /**

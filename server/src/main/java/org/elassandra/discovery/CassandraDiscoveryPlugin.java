@@ -14,8 +14,7 @@ import org.opensearch.plugins.DiscoveryPlugin;
 import org.opensearch.plugins.Plugin;
 
 /**
- * Elasticsearch 6.8 registered Cassandra discovery via {@code DiscoveryPlugin#getDiscoveryTypes}; OpenSearch 1.3 removed
- * that SPI. The Cassandra discovery implementation remains in {@link CassandraDiscovery}; wiring for OpenSearch is TBD.
+ * Cassandra discovery is selected with {@code discovery.type: cassandra} (see {@link org.opensearch.discovery.DiscoveryModule}).
  */
 public class CassandraDiscoveryPlugin extends Plugin implements DiscoveryPlugin {
 

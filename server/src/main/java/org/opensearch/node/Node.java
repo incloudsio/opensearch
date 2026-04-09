@@ -626,6 +626,7 @@ public class Node implements Closeable {
                 searchModule.getValuesSourceRegistry(),
                 recoveryStateFactories
             );
+            clusterService.setIndicesService(indicesService);
 
             final AliasValidator aliasValidator = new AliasValidator();
 
@@ -807,6 +808,7 @@ public class Node implements Closeable {
                 transportService,
                 namedWriteableRegistry,
                 networkService,
+                clusterService,
                 clusterService.getMasterService(),
                 clusterService.getClusterApplierService(),
                 clusterService.getClusterSettings(),

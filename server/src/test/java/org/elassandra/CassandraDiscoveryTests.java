@@ -37,7 +37,7 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.test.ESSingleNodeTestCase;
-import org.opensearch.test.discovery.MockCassandraDiscovery;
+import org.elassandra.discovery.MockCassandraDiscovery;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;

@@ -54,7 +54,7 @@ import org.opensearch.plugins.Plugin;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.MockSearchService;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.test.discovery.MockCassandraDiscovery;
+import org.elassandra.discovery.MockCassandraDiscovery;
 import org.opensearch.test.store.MockFSIndexStore;
 import org.opensearch.test.transport.MockTransportService;
 import org.opensearch.threadpool.ThreadPool;

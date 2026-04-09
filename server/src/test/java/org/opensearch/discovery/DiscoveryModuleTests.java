@@ -37,6 +37,7 @@ import org.opensearch.cluster.coordination.Coordinator;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.RerouteService;
 import org.opensearch.cluster.service.ClusterApplier;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.cluster.service.MasterService;
 import org.opensearch.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.common.network.NetworkService;
@@ -112,6 +113,7 @@ public class DiscoveryModuleTests extends OpenSearchTestCase {
             transportService,
             namedWriteableRegistry,
             null,
+            mock(ClusterService.class),
             masterService,
             clusterApplier,
             clusterSettings,
