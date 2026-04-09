@@ -226,7 +226,10 @@ public class ElasticQueryHandler extends QueryProcessor {
                     Token right = ((PartitionPosition) bounds.right).getToken();
                     // undefined bound is set to minimum.
                     if (!left.isMinimum() || !right.isMinimum()) {
-                        Range range = (!left.isMinimum() && right.isMinimum()) ? new Range(left, AbstractSearchStrategy.TOKEN_MAX) : new Range(left, right);
+                        Range<Token> range =
+                            (!left.isMinimum() && right.isMinimum())
+                                ? new Range<>(left, AbstractSearchStrategy.TOKEN_MAX)
+                                : new Range<>(left, right);
                         srb.setTokenRanges(new HashSet<>(Collections.singletonList(range)));
                         if (logger.isDebugEnabled())
                             logger.debug("tokenRanges={}", range);

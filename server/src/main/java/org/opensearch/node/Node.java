@@ -1019,6 +1019,14 @@ public class Node implements Closeable {
     /**
      * Start the node. If the node is already started, this method is no-op.
      */
+    /**
+     * Elassandra: phased activation hook (ported from Elasticsearch 6.8 fork).
+     * Delegates to {@link #start()} for OpenSearch 1.3.
+     */
+    public Node activate() throws NodeValidationException {
+        return start();
+    }
+
     public Node start() throws NodeValidationException {
         if (!lifecycle.moveToStarted()) {
             return this;
