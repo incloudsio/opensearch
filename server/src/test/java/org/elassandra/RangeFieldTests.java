@@ -23,7 +23,7 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.text.ParseException;
@@ -46,7 +46,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class RangeFieldTests extends ESSingleNodeTestCase {
+public class RangeFieldTests extends OpenSearchSingleNodeTestCase {
 
     private static String FROM_DATE = "2016-10-31";
     private static String TO_DATE = "2016-11-05 23:00:00";

@@ -132,9 +132,22 @@ public class BootstrapForTesting {
                 Security.addClasspathPermissions(perms);
                 // java.io.tmpdir
                 FilePermissionUtils.addDirectoryPath(perms, "java.io.tmpdir", javaTmpDir, "read,readlink,write,delete", false);
+                // Gradle test worker cwd (Cassandra sometimes resolves relative paths like conf/.keystore against user.dir).
+                FilePermissionUtils.addDirectoryPath(
+                    perms,
+                    "user.dir",
+                    PathUtils.get(System.getProperty("user.dir")),
+                    "read,readlink,write,delete",
+                    false
+                );
                 // custom test config file
                 if (Strings.hasLength(System.getProperty("tests.config"))) {
                     FilePermissionUtils.addSingleFilePath(perms, PathUtils.get(System.getProperty("tests.config")), "read,readlink");
+                }
+                // Elassandra embedded tests (side-car init.gradle sets cassandra.home): Cassandra + Netty + JMX exceed
+                // the stock OpenSearch test policy; grant AllPermission like the Gradle worker jar (test-framework.policy).
+                if (Strings.hasLength(System.getProperty("cassandra.home"))) {
+                    perms.add(new java.security.AllPermission());
                 }
                 // intellij hack: intellij test runner wants setIO and will
                 // screw up all test logging without it!

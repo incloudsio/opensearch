@@ -33,7 +33,7 @@ import org.opensearch.common.xcontent.XContentParser;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
@@ -51,7 +51,7 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 //mvn test -Pdev -pl om.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.PartitionedIndexTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
-public class PartitionedIndexTests extends ESSingleNodeTestCase {
+public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void basicPartitionFunctionTest() throws Exception {

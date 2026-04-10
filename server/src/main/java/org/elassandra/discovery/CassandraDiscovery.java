@@ -468,6 +468,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
     @Override
     protected void doStart()  {
+        // OpenSearch Node.start() runs discovery.start() before clusterService.start() so the applier can
+        // receive setInitialState(...). Legacy Node.activate() called initClusterState() explicitly; ensure
+        // the standard path does too (idempotent when activate() already initialized).
+        if (committedState.get() == null) {
+            initClusterState(transportService.getLocalNode());
+        }
         Gossiper.instance.register(this);
         synchronized (gossipCluster) {
             logger.debug("Connected to cluster [{}]", clusterName.value());

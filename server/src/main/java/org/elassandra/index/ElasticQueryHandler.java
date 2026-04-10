@@ -230,7 +230,8 @@ public class ElasticQueryHandler extends QueryProcessor {
                             (!left.isMinimum() && right.isMinimum())
                                 ? new Range<>(left, AbstractSearchStrategy.TOKEN_MAX)
                                 : new Range<>(left, right);
-                        srb.setTokenRanges(new HashSet<>(Collections.singletonList(range)));
+                        // OpenSearch 1.3: SearchRequest.tokenRanges not merged yet; token routing handled via CqlFetchPhase elsewhere.
+                        // srb.setTokenRanges(new HashSet<>(Collections.singletonList(range)));
                         if (logger.isDebugEnabled())
                             logger.debug("tokenRanges={}", range);
                     }

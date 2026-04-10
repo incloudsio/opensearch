@@ -23,7 +23,7 @@ import org.apache.cassandra.service.StorageService;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -41,7 +41,7 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 //gradle :server:test -Dtests.seed=65E2CF27F286CC89 -Dtests.class=org.elassandra.IndexBuildTests -Dtests.security.manager=false -Dtests.locale=en-PH -Dtests.timezone=America/Coral_Harbour
-public class IndexBuildTests extends ESSingleNodeTestCase {
+public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
     static long N = 10;
 
     @Test

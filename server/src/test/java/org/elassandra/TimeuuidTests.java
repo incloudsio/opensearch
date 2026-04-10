@@ -23,7 +23,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.UUID;
@@ -36,7 +36,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class TimeuuidTests extends ESSingleNodeTestCase {
+public class TimeuuidTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void timeuuidInsertTest() throws Exception {

@@ -29,7 +29,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Map;
@@ -42,7 +42,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class CompactionTests extends ESSingleNodeTestCase {
+public class CompactionTests extends OpenSearchSingleNodeTestCase {
     
     // gradle :core:test -Dtests.seed=C2C04213660E4546 -Dtests.class=org.elassandra.CompactionTests -Dtests.method="expiredTtlColumnCompactionTest" -Dtests.security.manager=false -Dtests.locale=zh -Dtests.timezone=Canada/Eastern
     @Test

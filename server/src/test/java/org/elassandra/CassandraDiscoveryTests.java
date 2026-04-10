@@ -36,7 +36,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.mapper.MapperService;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.elassandra.discovery.MockCassandraDiscovery;
 import org.junit.Test;
 
@@ -46,7 +46,7 @@ import java.util.*;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
-public class CassandraDiscoveryTests extends ESSingleNodeTestCase {
+public class CassandraDiscoveryTests extends OpenSearchSingleNodeTestCase {
 
     long version = -1;
     int resumit = 0;

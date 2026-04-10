@@ -748,7 +748,10 @@ final class BootstrapChecks {
 
         boolean isAllPermissionGranted() {
             final SecurityManager sm = System.getSecurityManager();
-            assert sm != null;
+            // Elassandra embedded tests use -Dtests.security.manager=false so Cassandra can set Netty properties; treat as not "all permission".
+            if (sm == null) {
+                return false;
+            }
             try {
                 sm.checkPermission(new AllPermission());
             } catch (final SecurityException e) {

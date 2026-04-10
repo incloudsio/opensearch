@@ -22,7 +22,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
@@ -33,7 +33,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class NamingTests extends ESSingleNodeTestCase {
+public class NamingTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testNamedUDT() throws Exception {

@@ -45,6 +45,12 @@ import java.util.function.Function;
  */
 public abstract class MetadataFieldMapper extends ParametrizedFieldMapper {
 
+    /** Elassandra: invoked before root fields are indexed (ES 6.8 fork). */
+    public void preCreate(ParseContext context) throws IOException {}
+
+    /** Elassandra: invoked after root fields are indexed (ES 6.8 fork). */
+    public void postCreate(ParseContext context) throws IOException {}
+
     public interface TypeParser extends Mapper.TypeParser {
 
         @Override

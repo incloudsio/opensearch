@@ -24,7 +24,7 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Map;
@@ -38,7 +38,7 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 //gradle :server:test -Dtests.seed=65E2CF27F286CC89 -Dtests.class=org.elassandra.OpaqueStorageTests -Dtests.security.manager=false -Dtests.locale=en-PH -Dtests.timezone=America/Coral_Harbour
-public class OpaqueStorageTests extends ESSingleNodeTestCase {
+public class OpaqueStorageTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testOpaqueStorageInsertOnly() throws Exception {

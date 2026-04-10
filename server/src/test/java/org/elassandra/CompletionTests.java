@@ -26,7 +26,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.search.suggest.SuggestBuilder;
 import org.opensearch.search.suggest.completion.CompletionSuggestionBuilder;
 import org.opensearch.search.suggest.completion.context.CategoryQueryContext;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -42,7 +42,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class CompletionTests extends ESSingleNodeTestCase {
+public class CompletionTests extends OpenSearchSingleNodeTestCase {
     
     @Test
     public void testCompletionSubfield() throws Exception {

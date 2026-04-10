@@ -20,7 +20,7 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope.Scope;
 
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
@@ -32,7 +32,7 @@ import static org.junit.Assert.assertTrue;
  */
 //gradle :server:test -Dtests.seed=65E2CF27F286CC89 -Dtests.class=org.elassandra.ClusterSettingsTests -Dtests.security.manager=false -Dtests.locale=en-PH -Dtests.timezone=America/Coral_Harbour
 @ThreadLeakScope(Scope.NONE)
-public class ClusterSettingsTests extends ESSingleNodeTestCase {
+public class ClusterSettingsTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void smokeSidecarJvm() {

@@ -26,7 +26,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Map;
@@ -38,7 +38,7 @@ import static org.hamcrest.Matchers.equalTo;
  * Tests for various table options.
  * @author vroyer
  */
-public class TableOptionsTests extends ESSingleNodeTestCase {
+public class TableOptionsTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testTWCS() throws Exception {

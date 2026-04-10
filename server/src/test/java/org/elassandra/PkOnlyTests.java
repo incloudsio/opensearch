@@ -25,7 +25,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -41,7 +41,7 @@ import static org.hamcrest.Matchers.is;
  * Test pk-only documents.
  * @author Barth
  */
-public class PkOnlyTests extends ESSingleNodeTestCase {
+public class PkOnlyTests extends OpenSearchSingleNodeTestCase {
     
     /**
      * Test indexing dynamically an empty document (pk-only), creating the underlying CQL table on the fly.

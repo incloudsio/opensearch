@@ -509,13 +509,22 @@ public class QueryManager {
         return rowAsArray(indexShard, type, row, false);
     }
 
-    private Object value(FieldMapper fieldMapper, Object rowValue, boolean valueForSearch) {
+    private Object value(FieldMapper fieldMapper, Object rowValue, boolean valueForSearch, AbstractType<?> columnType) {
         if (fieldMapper != null) {
             final MappedFieldType fieldType = fieldMapper.fieldType();
-            return (valueForSearch) ? fieldType.valueForDisplay( rowValue ) : fieldType.cqlValue( rowValue );
+            return (valueForSearch)
+                ? fieldType.valueForDisplay(rowValue)
+                : fieldType.cqlValue(rowValue, columnType);
         } else {
             return rowValue;
         }
+    }
+
+    /** Maps active-shard policy to Cassandra CL (side-car: stub until ActiveShardCount fork is merged). */
+    private static ConsistencyLevel activeShardsToCassandraConsistencyLevel(
+        org.opensearch.action.support.ActiveShardCount activeShardCount
+    ) {
+        return ConsistencyLevel.LOCAL_QUORUM;
     }
 
     // TODO: return raw values if no mapper found.
@@ -551,7 +560,7 @@ public class QueryManager {
                     break;
                 case TIMEUUID:
                     if (fieldMapper instanceof DateFieldMapper && fieldMapper.CQL3Type().equals(CQL3Type.Native.TIMESTAMP)) {
-                        values[i] = value(fieldMapper, UUIDGen.unixTimestamp(row.getUUID(columnName)), valueForSearch);
+                        values[i] = value(fieldMapper, UUIDGen.unixTimestamp(row.getUUID(columnName)), valueForSearch, colSpec.type);
                         break;
                     }
                     values[i] = row.getUUID(columnName).toString();
@@ -560,48 +569,49 @@ public class QueryManager {
                     values[i] = row.getUUID(columnName).toString();
                     break;
                 case TIMESTAMP:
-                    values[i] = value(fieldMapper, row.getTimestamp(columnName).getTime(), valueForSearch);
+                    values[i] = value(fieldMapper, row.getTimestamp(columnName).getTime(), valueForSearch, colSpec.type);
                     break;
                 case DATE:
-                    values[i] = value(fieldMapper, SimpleDateSerializer.dayToTimeInMillis(row.getInt(columnName)), valueForSearch);
+                    values[i] = value(fieldMapper, SimpleDateSerializer.dayToTimeInMillis(row.getInt(columnName)), valueForSearch, colSpec.type);
                     break;
                 case TIME:
-                    values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch, colSpec.type);
                     break;
                 case INT:
-                    values[i] = value(fieldMapper, row.getInt(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getInt(columnName), valueForSearch, colSpec.type);
                     break;
                 case SMALLINT:
-                    values[i] = value(fieldMapper, row.getShort(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getShort(columnName), valueForSearch, colSpec.type);
                     break;
                 case TINYINT:
-                    values[i] = value(fieldMapper, row.getByte(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getByte(columnName), valueForSearch, colSpec.type);
                     break;
                 case BIGINT:
-                    values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getLong(columnName), valueForSearch, colSpec.type);
                     break;
                 case DOUBLE:
-                    values[i] = value(fieldMapper, row.getDouble(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getDouble(columnName), valueForSearch, colSpec.type);
                     break;
                 case FLOAT:
-                    values[i] = value(fieldMapper, row.getFloat(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getFloat(columnName), valueForSearch, colSpec.type);
                     break;
                 case DECIMAL:
-                    values[i] = value(fieldMapper, row.getDecimal(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getDecimal(columnName), valueForSearch, colSpec.type);
                     break;
                 case BLOB:
                     values[i] = value(fieldMapper,
                             row.getBlob(columnName),
-                            valueForSearch);
+                            valueForSearch,
+                            colSpec.type);
                     break;
                 case BOOLEAN:
-                    values[i] = value(fieldMapper, row.getBoolean(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getBoolean(columnName), valueForSearch, colSpec.type);
                     break;
                 case COUNTER:
                     logger.warn("Ignoring unsupported counter {} for column {}", cql3Type, columnName);
                     break;
                 case INET:
-                    values[i] = value(fieldMapper, row.getInetAddress(columnName), valueForSearch);
+                    values[i] = value(fieldMapper, row.getInetAddress(columnName), valueForSearch, colSpec.type);
                     break;
                 default:
                     logger.error("Ignoring unsupported type {} for column {}", cql3Type, columnName);
@@ -624,7 +634,7 @@ public class QueryManager {
                         final List list2 = row.getList(colSpec.name.toString(), elementType);
                         list = new ArrayList(list2.size());
                         for(Object v : list2) {
-                            list.add(value(fieldMapper, v, valueForSearch));
+                            list.add(value(fieldMapper, v, valueForSearch, elementType));
                         }
                     }
                     values[i] =  (list.size() == 1) ? list.get(0) : list;
@@ -644,7 +654,7 @@ public class QueryManager {
                         final Set set2 = row.getSet(columnName, elementType);
                         set = new HashSet(set2.size());
                         for(Object v : set2) {
-                            set.add( value(fieldMapper, v, valueForSearch) );
+                            set.add(value(fieldMapper, v, valueForSearch, elementType));
                         }
                     }
                     values[i] =  (set.size() == 1) ? set.iterator().next() : set;
@@ -668,7 +678,7 @@ public class QueryManager {
                         map = new HashMap<String, Object>(map2.size());
                         for(String key : map2.keySet()) {
                             FieldMapper subMapper = (FieldMapper)objectMapper.getMapper(key);
-                            map.put(key,  value(subMapper, map2.get(key), valueForSearch) );
+                            map.put(key, value(subMapper, map2.get(key), valueForSearch, elementType));
                         }
                     }
                     values[i] =  map;
@@ -711,8 +721,7 @@ public class QueryManager {
         final SourceToParse sourceToParse = SourceToParse.source(request.index(), request.type(), request.id(), request.source(), request.getContentType());
         if (request.routing() != null)
             sourceToParse.routing(request.routing());
-        if (request.parent() != null)
-            sourceToParse.parent(request.parent());
+        // OpenSearch 7.x / 1.3: parent documents removed; routing carries join semantics when used.
 
         // get the docMapper after a potential mapping update
         DocumentMapperForType docMapperForType = indexShard.mapperService().documentMapperWithAutoCreate(request.type());
@@ -721,7 +730,7 @@ public class QueryManager {
         ParsedDocument doc = docMapper.parse(sourceToParse);
         Mapping mappingUpdate = doc.dynamicMappingsUpdate();
 
-        if (mappingUpdate == null && !indexShard.mapperService().hasMapping(request.type())) {
+        if (mappingUpdate == null && indexShard.mapperService().documentMapper(request.type()) == null) {
             mappingUpdate = docMapper.mapping();
         }
 
@@ -749,7 +758,7 @@ public class QueryManager {
             logger.trace("Insert metadata.version={} index=[{}] table=[{}] id=[{}] source={} consistency={}",
                 this.clusterService.state().metadata().version(),
                 indexShard.shardId().getIndex().getName(), cfName, request.id(), sourceMap,
-                request.waitForActiveShards().toCassandraConsistencyLevel());
+                activeShardsToCassandraConsistencyLevel(request.waitForActiveShards()));
 
         final TableMetadata cfm = SchemaManager.getTableMetadata(keyspaceName, cfName);
 
@@ -759,8 +768,7 @@ public class QueryManager {
             map.put(IdFieldMapper.NAME, Serializer.serialize(request.index(), cfName, cfm.getColumn(docMapper.idFieldMapper().cqlName()).type, IdFieldMapper.NAME, id, docMapper.idFieldMapper()));
             map.put(SourceFieldMapper.NAME, Serializer.serialize(request.index(), cfName, cfm.getColumn(docMapper.sourceMapper().cqlName()).type, SourceFieldMapper.NAME, request.source(), docMapper.sourceMapper()));
         } else {
-            if (request.parent() != null)
-                sourceMap.put(ParentFieldMapper.NAME, request.parent());
+            // OpenSearch 7.x: IndexRequest no longer has parent(); join fields use routing + mapping.
 
             // normalize the _id and may find some column value in _id.
             // if the provided columns does not contains all the primary key columns, parse the _id to populate the columns in map.
@@ -852,7 +860,7 @@ public class QueryManager {
             query = buildInsertQuery(keyspaceName, cfName, map, id,
                     true,
                     values, 0);
-            final boolean applied = this.clusterService.processWriteConditional(request.waitForActiveShards().toCassandraConsistencyLevel(), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
+            final boolean applied = this.clusterService.processWriteConditional(activeShardsToCassandraConsistencyLevel(request.waitForActiveShards()), ConsistencyLevel.LOCAL_SERIAL, query, (Object[])values);
             if (!applied)
                 throw new VersionConflictEngineException(indexShard.shardId(), request.id(), "PAXOS insert failed, document already exists");
         } else {
@@ -869,7 +877,7 @@ public class QueryManager {
             }
             values = new ByteBuffer[map.size()];
             query = buildInsertQuery(keyspaceName, cfName, map, id, false, values, 0);
-            this.clusterService.process(request.waitForActiveShards().toCassandraConsistencyLevel(), query, (Object[])values);
+            this.clusterService.process(activeShardsToCassandraConsistencyLevel(request.waitForActiveShards()), query, (Object[])values);
         }
 
         assert request.versionType().validateVersionForWrites(request.version());

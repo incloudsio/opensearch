@@ -1042,4 +1042,17 @@ public final class DocumentParser {
         }
         return objectMapper.getMapper(subfields[subfields.length - 1]);
     }
+    // --- Elassandra: ES 6.8 static API for org.elassandra.index.ElasticSecondaryIndex ---
+    public static ParseContext elassandraNestedContext(ParseContext context, ObjectMapper mapper) {
+        return nestedContext(context, mapper);
+    }
+
+    public static ObjectMapper.Dynamic elassandraDynamicOrDefault(ObjectMapper parentMapper, ParseContext context) {
+        return dynamicOrDefault(parentMapper, context);
+    }
+
+    public static void elassandraNested(ParseContext context, ObjectMapper.Nested nested) {
+        nested(context, nested);
+    }
+
 }

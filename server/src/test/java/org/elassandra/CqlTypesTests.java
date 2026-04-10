@@ -54,7 +54,7 @@ import org.opensearch.search.aggregations.metrics.InternalSum;
 import org.opensearch.search.sort.NestedSortBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.math.BigDecimal;
@@ -74,7 +74,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class CqlTypesTests extends ESSingleNodeTestCase {
+public class CqlTypesTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testTest() throws Exception {

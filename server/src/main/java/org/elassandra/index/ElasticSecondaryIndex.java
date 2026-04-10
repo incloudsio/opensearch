@@ -393,7 +393,7 @@ public class ElasticSecondaryIndex implements Index {
             // see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
             // code from DocumentParser.parseObject()
             if (nested.isNested()) {
-                context = DocumentParser.nestedContext(context, objectMapper);
+                context = DocumentParser.elassandraNestedContext(context, objectMapper);
             }
 
             //ContentPath.Type origPathType = path().pathType();
@@ -425,7 +425,7 @@ public class ElasticSecondaryIndex implements Index {
                             CollectionType ctype = (CollectionType) cd.type;
                             if (ctype.kind == CollectionType.Kind.MAP &&
                                 ((MapType) ctype).getKeysType().asCQL3Type().toString().equals("text") &&
-                                (DocumentParser.dynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
+                                (DocumentParser.elassandraDynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
                                 logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                                 // upgrade to write lock
                                 indexInfo.dynamicMappingUpdateLock.readLock().unlock();
@@ -519,7 +519,7 @@ public class ElasticSecondaryIndex implements Index {
 
             // restore the enable path flag
             if (nested.isNested()) {
-                DocumentParser.nested(context, nested);
+                DocumentParser.elassandraNested(context, nested);
             }
         }
     }
@@ -2172,7 +2172,7 @@ public class ElasticSecondaryIndex implements Index {
                         metadataMapper.preCreate(context);
 
                     context.docMapper.idFieldMapper().createField(context, uid.id());
-                    context.docMapper.uidMapper().createField(context, uid);
+                    context.docMapper.idFieldMapper().createField(context, uid);
                     context.docMapper.typeMapper().createField(context, typeName);
                     context.docMapper.tokenFieldMapper().createField(context, key.getToken().getTokenValue());
                     context.docMapper.seqNoFieldMapper().createField(context, null); // add zero _seq_no
@@ -2311,7 +2311,6 @@ public class ElasticSecondaryIndex implements Index {
                                     XContentType.JSON,
                                     (Mapping) null); // mappingUpdate
 
-                                parsedDoc.parent(context.parent());
                                 indexParsedDocument(indexInfo, context.docMapper, parsedDoc, startTime, ttl);
                             }
                         } catch (IOException e) {

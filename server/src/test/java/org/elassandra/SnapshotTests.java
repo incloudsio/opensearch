@@ -26,7 +26,7 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.Index;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -47,7 +47,7 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 //mvn test -Pdev -pl om.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
-public class SnapshotTests extends ESSingleNodeTestCase {
+public class SnapshotTests extends OpenSearchSingleNodeTestCase {
 
     // SSTable snapshotDir = data/<keyspace>/<table>/snapshots/<snapshot_name>/
     public void restoreSSTable(String dataLocation, String keyspaceName, String cfName, UUID srcId, UUID dstId, String snapshotName) throws IOException {

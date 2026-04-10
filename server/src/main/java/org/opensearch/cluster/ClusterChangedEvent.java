@@ -213,6 +213,15 @@ public class ClusterChangedEvent {
     }
 
     /**
+     * Returns {@code true} iff the {@link IndexMetadata} instances differ by reference (OpenSearch 1.3
+     * {@code ClusterChangedEvent#indexMetadataChanged} parity for IndicesClusterStateService).
+     */
+    public static boolean indexMetadataChanged(IndexMetadata metadata1, IndexMetadata metadata2) {
+        assert metadata1 != null && metadata2 != null;
+        return metadata1 != metadata2;
+    }
+
+    /**
      * Returns a set of custom meta data types when any custom metadata for the cluster has changed
      * between the previous cluster state and the new cluster state. custom meta data types are
      * returned iff they have been added, updated or removed between the previous and the current state

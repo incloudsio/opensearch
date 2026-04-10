@@ -36,6 +36,7 @@ import com.github.jengelman.gradle.plugins.shadow.ShadowBasePlugin;
 import org.opensearch.gradle.info.BuildParams;
 import org.opensearch.gradle.info.GlobalBuildInfoPlugin;
 import org.opensearch.gradle.test.ErrorReportingTestListener;
+import org.opensearch.gradle.OS;
 import org.opensearch.gradle.util.Util;
 import org.gradle.api.Action;
 import org.gradle.api.JavaVersion;
@@ -99,6 +100,13 @@ public class OpenSearchTestBasePlugin implements Plugin<Project> {
             test.doFirst(new Action<Task>() {
                 @Override
                 public void execute(Task t) {
+                    // Delete stale testrun before mkdirs(workingDir). A separate init.gradle doFirst that ran *after* this
+                    // block used to delete testrun too late, leaving java.io.tmpdir paths from prior runs and causing
+                    // FileAlreadyExistsException on createDirectory(temp) → SKIPPED tests and Gradle worker exit 100.
+                    File testrunRoot = new File(project.getBuildDir(), "testrun");
+                    if (testrunRoot.exists()) {
+                        project.delete(testrunRoot);
+                    }
                     mkdirs(testOutputDir);
                     mkdirs(heapdumpDir);
                     mkdirs(test.getWorkingDir());

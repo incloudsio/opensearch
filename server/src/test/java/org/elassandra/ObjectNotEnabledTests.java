@@ -30,7 +30,7 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.search.SearchHits;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 /**
@@ -38,7 +38,7 @@ import org.junit.Test;
  * @author vroyer
  *
  */
-public class ObjectNotEnabledTests extends ESSingleNodeTestCase {
+public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testNullDynamicField() throws Exception {

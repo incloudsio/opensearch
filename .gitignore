@@ -59,3 +59,5 @@ testfixtures_shared/
 
 # These are generated from .ci/jobs.t
 .ci/jobs/
+# Local artifacts (e.g. test extraction)
+com/

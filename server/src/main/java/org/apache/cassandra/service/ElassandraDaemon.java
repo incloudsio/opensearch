@@ -124,7 +124,12 @@ public class ElassandraDaemon extends CassandraDaemon {
     public void activate(boolean addShutdownHook, boolean createNode, Settings settings, Environment env, Collection<Class<? extends Plugin>> pluginList) {
         try
         {
-            DatabaseDescriptor.daemonInitialization();
+            // OpenSearchSingleNodeTestCase calls DatabaseDescriptor.daemonInitialization(…) with a programmatic Config
+            // before activate(). A second no-arg daemonInitialization() here reloads cassandra.yaml and can corrupt
+            // state or abort the forked test JVM early (Gradle exit 100).
+            if (Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "false")) == false) {
+                DatabaseDescriptor.daemonInitialization();
+            }
             DatabaseDescriptor.createAllDirectories();
         }
         catch (ExceptionInInitializerError e)
@@ -146,12 +151,16 @@ public class ElassandraDaemon extends CassandraDaemon {
         NativeLibrary.tryMlockall();
 
         //setup(addShutdownHook, settings, env, pluginList);
-        OpenSearchBootstrap.initNatives(
-                env.tmpFile(),
-                settings.getAsBoolean("bootstrap.memory_lock", true),
-                settings.getAsBoolean("bootstrap.system_call_filter", false),
-                settings.getAsBoolean("bootstrap.ctrlhandler", true));
-        OpenSearchBootstrap.initProbes();
+        // BootstrapForTesting (OpenSearch test JVM) already ran Bootstrap.initializeNatives / initializeProbes.
+        // Calling them again here trips JNA/JNI (e.g. exit 100 in Docker) when ElassandraDaemon.activate runs.
+        if (Boolean.parseBoolean(System.getProperty("tests.gradle", "false")) == false) {
+            OpenSearchBootstrap.initNatives(
+                    env.tmpFile(),
+                    settings.getAsBoolean("bootstrap.memory_lock", true),
+                    settings.getAsBoolean("bootstrap.system_call_filter", false),
+                    settings.getAsBoolean("bootstrap.ctrlhandler", true));
+            OpenSearchBootstrap.initProbes();
+        }
 
         if (addShutdownHook) {
           Runtime.getRuntime().addShutdownHook(new Thread() {

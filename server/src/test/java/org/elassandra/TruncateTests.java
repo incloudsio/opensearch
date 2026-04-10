@@ -25,7 +25,7 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.engine.Segment;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
@@ -36,7 +36,7 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  *
  */
-public class TruncateTests extends ESSingleNodeTestCase {
+public class TruncateTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testNestedTruncate() throws Exception {

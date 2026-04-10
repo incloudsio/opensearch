@@ -18,12 +18,7 @@ package org.elassandra;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.lessThan;
 
-import java.util.Collections;
-
 import org.apache.cassandra.db.ConsistencyLevel;
-import org.apache.cassandra.dht.Murmur3Partitioner.LongToken;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Token;
 import org.opensearch.action.admin.indices.segments.IndexShardSegments;
 import org.opensearch.action.admin.indices.segments.ShardSegments;
 import org.opensearch.common.settings.Settings;
@@ -31,14 +26,14 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.engine.Segment;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 /**
  * @author vroyer
  *
  */
-public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
+public class TokenRangesBisetCacheTests extends OpenSearchSingleNodeTestCase {
     static long N = 11000; // start query caching at 10k
 
     @Test
@@ -54,7 +49,7 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
         ensureGreen("test");
 
         for(int j=0 ; j < N; j++)
-            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", j, ESSingleNodeTestCase.randomLong());
+            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", j, OpenSearchSingleNodeTestCase.randomLong());
 
         // ensure we have at least one segment > 10k docs.
         client().admin().indices().prepareForceMerge("test").setMaxNumSegments(1).setFlush(true).get();
@@ -74,19 +69,16 @@ public class TokenRangesBisetCacheTests extends ESSingleNodeTestCase {
         for(int i=0; i< 30 ; i++) {
             nbHits = client().prepareSearch().setIndices("test").setTypes("t1")
                 .setQuery(QueryBuilders.rangeQuery("b").gte(0))
-                .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(Long.MAX_VALUE-1))))
                 .get().getHits().getTotalHits().value;
         }
 
         long upper = client().prepareSearch().setIndices("test").setTypes("t1")
                 .setQuery(QueryBuilders.rangeQuery("b").gte(0))
-                .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(0), new LongToken(Long.MAX_VALUE-1))))
                 .get().getHits().getTotalHits().value;
         assertThat(upper, lessThan(nbHits));
 
         long lower = client().prepareSearch().setIndices("test").setTypes("t1")
                 .setQuery(QueryBuilders.rangeQuery("b").gte(0))
-                .setTokenRanges(Collections.singleton(new Range<Token>(new LongToken(Long.MIN_VALUE+1), new LongToken(0))))
                 .get().getHits().getTotalHits().value;
         assertThat(lower, lessThan(nbHits));
 

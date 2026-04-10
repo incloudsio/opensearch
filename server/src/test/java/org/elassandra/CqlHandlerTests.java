@@ -30,7 +30,7 @@ import org.opensearch.search.aggregations.bucket.histogram.HistogramAggregationB
 import org.opensearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.opensearch.search.aggregations.metrics.SumAggregationBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -45,7 +45,7 @@ import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 
-public class CqlHandlerTests extends ESSingleNodeTestCase {
+public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
 
     public CqlHandlerTests() {
         super();

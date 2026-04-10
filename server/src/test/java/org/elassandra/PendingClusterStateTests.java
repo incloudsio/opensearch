@@ -21,12 +21,12 @@ import org.elassandra.discovery.PendingClusterStatesQueue;
 import org.opensearch.cluster.ClusterName;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.test.ESSingleNodeTestCase;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import static org.hamcrest.Matchers.equalTo;
 
-public class PendingClusterStateTests extends ESSingleNodeTestCase {
+public class PendingClusterStateTests extends OpenSearchSingleNodeTestCase {
     private static final Logger logger = LogManager.getLogger(PendingClusterStateTests.class);
 
     class Listener implements PendingClusterStatesQueue.StateProcessedListener {
