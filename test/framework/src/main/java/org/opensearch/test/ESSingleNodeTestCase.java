@@ -34,6 +34,8 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Priority;
+import org.opensearch.common.io.PathUtils;
+import org.opensearch.common.io.PathUtilsForTesting;
 import org.opensearch.common.network.NetworkModule;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
@@ -69,6 +71,9 @@ import org.junit.BeforeClass;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -95,8 +100,12 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
     private static final Semaphore testMutex = new Semaphore(1);
 
     /**
-     * @param opensearchDataPath absolute path for OpenSearch {@code path.data} / shared data; must live under Lucene's mock filesystem
-     *                           (use {@link #createTempDir()}), not under {@code cassandra.home}/data, or {@link org.opensearch.env.NodeEnvironment} fails on the test FS.
+     * OpenSearch {@code path.data} on the real default filesystem (see {@link PathUtilsForTesting#teardown()} in {@link #setUp()}).
+     */
+    private static String embeddedOpensearchDataPath;
+
+    /**
+     * @param opensearchDataPath absolute path for OpenSearch {@code path.data} / shared data (see {@link #embeddedOpensearchDataPath}).
      */
     public static synchronized void initElassandraDeamon(
         Settings testSettings,
@@ -104,6 +113,11 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
         String opensearchDataPath
     ) {
         if (ElassandraDaemon.instance == null) {
+            try {
+                Files.createDirectories(Paths.get(opensearchDataPath));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
             if (Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "true"))) {
                 DatabaseDescriptor.daemonInitialization(() -> {
                     String homeProp = System.getProperty("cassandra.home");
@@ -182,11 +196,6 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
 
     public ESSingleNodeTestCase() {
         super();
-        initElassandraDeamon(
-            nodeSettings(1),
-            getPlugins(),
-            createTempDir().resolve("elasticsearch.data").toAbsolutePath().toString()
-        );
     }
 
     protected boolean addMockTransportService() {
@@ -317,7 +326,24 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
     public void setUp() throws Exception {
         logger.info("[{}#{}]: acquiring semaphore ={}", getTestClass().getSimpleName(), getTestName(), testMutex.toString());
         testMutex.acquireUninterruptibly();
-        super.setUp();
+        synchronized (ESSingleNodeTestCase.class) {
+            super.setUp();
+            FileSystem luceneMockFs = null;
+            if (embeddedOpensearchDataPath == null) {
+                luceneMockFs = PathUtils.getDefaultFileSystem();
+                PathUtilsForTesting.teardown();
+                Path tmp = FileSystems.getDefault().getPath(System.getProperty("java.io.tmpdir"));
+                Files.createDirectories(tmp);
+                embeddedOpensearchDataPath = Files.createTempDirectory(tmp, "elassandra-es-data-").toAbsolutePath().toString();
+                Files.createDirectories(Paths.get(embeddedOpensearchDataPath));
+            }
+            if (ElassandraDaemon.instance == null) {
+                initElassandraDeamon(nodeSettings(1), getPlugins(), embeddedOpensearchDataPath);
+            }
+            if (luceneMockFs != null) {
+                PathUtilsForTesting.installMock(luceneMockFs);
+            }
+        }
         long seed = random().nextLong();
         if (ElassandraDaemon.instance.node() == null) {
             startNode(seed);
