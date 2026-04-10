@@ -43,6 +43,12 @@ public class PathUtilsForTesting {
 
     /** Sets a new default filesystem for testing */
     public static void setup() {
+        // Elassandra embedded Cassandra + OpenSearch: Lucene's mock FS fights java.io.tmpdir / Gradle working-dir
+        // layout (FileAlreadyExistsException on createDirectory, worker exit 100). Use the real default FS.
+        if (Boolean.parseBoolean(System.getProperty("elassandra.disable.lucene.mock.filesystem", "false"))) {
+            PathUtils.DEFAULT = PathUtils.ACTUAL_DEFAULT;
+            return;
+        }
         installMock(LuceneTestCase.createTempDir().getFileSystem());
     }
 

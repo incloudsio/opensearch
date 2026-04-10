@@ -184,6 +184,7 @@ import static org.hamcrest.Matchers.hasItem;
 @ThreadLeakLingering(linger = 5000) // 5 sec lingering
 @TimeoutSuite(millis = 20 * TimeUnits.MINUTE)
 @LuceneTestCase.SuppressSysoutChecks(bugUrl = "we log a lot on purpose")
+@LuceneTestCase.SuppressFileSystems("*")
 // we suppress pretty much all the lucene codecs for now, except asserting
 // assertingcodec is the winner for a codec here: it finds bugs and gives clear exceptions.
 @SuppressCodecs({

@@ -393,7 +393,7 @@ public class ElasticSecondaryIndex implements Index {
             // see https://www.elastic.co/guide/en/elasticsearch/guide/current/nested-objects.html
             // code from DocumentParser.parseObject()
             if (nested.isNested()) {
-                context = DocumentParser.elassandraNestedContext(context, objectMapper);
+                context = DocumentParser.nestedContext(context, objectMapper);
             }
 
             //ContentPath.Type origPathType = path().pathType();
@@ -425,7 +425,7 @@ public class ElasticSecondaryIndex implements Index {
                             CollectionType ctype = (CollectionType) cd.type;
                             if (ctype.kind == CollectionType.Kind.MAP &&
                                 ((MapType) ctype).getKeysType().asCQL3Type().toString().equals("text") &&
-                                (DocumentParser.elassandraDynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
+                                (DocumentParser.dynamicOrDefault(objectMapper, ctx) == ObjectMapper.Dynamic.TRUE)) {
                                 logger.debug("Updating mapping for field={} type={} value={} ", entry.getKey(), cd.type.toString(), value);
                                 // upgrade to write lock
                                 indexInfo.dynamicMappingUpdateLock.readLock().unlock();
@@ -519,7 +519,7 @@ public class ElasticSecondaryIndex implements Index {
 
             // restore the enable path flag
             if (nested.isNested()) {
-                DocumentParser.elassandraNested(context, nested);
+                DocumentParser.nested(context, nested);
             }
         }
     }

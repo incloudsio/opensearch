@@ -112,6 +112,7 @@ public class OpenSearchTestBasePlugin implements Plugin<Project> {
                     mkdirs(test.getWorkingDir());
                     // Do not mkdir workingDir/temp: Lucene PathUtilsForTesting installs a mock FS and expects to create
                     // `temp` itself; pre-creating it causes FileAlreadyExistsException and SKIPPED tests (Elassandra side-car).
+                    // When elassandra.disable.lucene.mock.filesystem=true (init.gradle), real FS is used and tmpdir is fine.
 
                     // TODO remove once jvm.options are added to test system properties
                     if (BuildParams.getRuntimeJavaVersion() == JavaVersion.VERSION_1_8) {
@@ -145,6 +146,8 @@ public class OpenSearchTestBasePlugin implements Plugin<Project> {
 
             if (Util.getBooleanProperty("tests.asserts", true)) {
                 test.jvmArgs("-ea", "-esa");
+                /* Elassandra: -da after -ea — disable asserts in Cassandra packages after global -ea */
+                test.jvmArgs("-da:org.apache.cassandra...");
             }
 
             Map<String, String> sysprops = new HashMap<String, String>() {
@@ -176,7 +179,10 @@ public class OpenSearchTestBasePlugin implements Plugin<Project> {
             );
             nonInputProperties.systemProperty("gradle.user.home", gradleHome);
             // we use 'temp' relative to CWD since this is per JVM and tests are forbidden from writing to CWD
-            nonInputProperties.systemProperty("java.io.tmpdir", test.getWorkingDir().toPath().resolve("temp"));
+            // Elassandra init.gradle sets elassandra.gradle.skip.test.tmpdir and supplies java.io.tmpdir in Test#doFirst.
+            if (Boolean.parseBoolean(System.getProperty("elassandra.gradle.skip.test.tmpdir", "false")) == false) {
+                nonInputProperties.systemProperty("java.io.tmpdir", test.getWorkingDir().toPath().resolve("temp"));
+            }
 
             // TODO: remove setting logging level via system property
             test.systemProperty("tests.logger.level", "WARN");
