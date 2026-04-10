@@ -141,6 +141,8 @@ dependencies {
   internalClusterTestImplementation(project(":test:framework")) {
     exclude group: 'org.opensearch', module: 'server'
   }
+  // Embedded Elassandra (ESSingleNodeTestCase) loads Netty4Plugin explicitly; keep it on :server:test runtime classpath.
+  testRuntimeOnly project(':modules:transport-netty4')
 }
 
 tasks.withType(JavaCompile).configureEach {

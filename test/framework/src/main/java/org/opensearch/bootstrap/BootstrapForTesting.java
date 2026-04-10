@@ -84,21 +84,28 @@ public class BootstrapForTesting {
     // without making things complex???
 
     static {
-        // make sure java.io.tmpdir exists always (in case code uses it in a static initializer)
+        // java.io.tmpdir is created later by Lucene TestRuleTemporaryFilesCleanup (mock FS). Do not mkdir it here:
+        // pre-creating it caused FileAlreadyExists when Lucene calls createDirectories on the mock layer.
+        // Natives / macImpl need an existing directory only for Files.createTempFile(dir, ...); use tmpdir's parent
+        // (OpenSearch: workingDir/test) which Gradle mkdirs in test.doFirst.
         Path javaTmpDir = PathUtils.get(
             Objects.requireNonNull(System.getProperty("java.io.tmpdir"), "please set ${java.io.tmpdir} in pom.xml")
         );
+        Path nativeScratchDir = javaTmpDir.getParent();
+        if (nativeScratchDir == null) {
+            nativeScratchDir = javaTmpDir;
+        }
         try {
-            Security.ensureDirectoryExists(javaTmpDir);
+            Security.ensureDirectoryExists(nativeScratchDir);
         } catch (Exception e) {
-            throw new RuntimeException("unable to create test temp directory", e);
+            throw new RuntimeException("unable to create native scratch directory for tests", e);
         }
 
         // just like bootstrap, initialize natives, then SM
         final boolean memoryLock = BootstrapSettings.MEMORY_LOCK_SETTING.get(Settings.EMPTY); // use the default bootstrap.memory_lock
                                                                                               // setting
         final boolean systemCallFilter = Booleans.parseBoolean(System.getProperty("tests.system_call_filter", "true"));
-        Bootstrap.initializeNatives(javaTmpDir, memoryLock, systemCallFilter, true);
+        Bootstrap.initializeNatives(nativeScratchDir, memoryLock, systemCallFilter, true);
 
         // initialize probes
         Bootstrap.initializeProbes();

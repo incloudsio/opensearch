@@ -102,7 +102,8 @@ public class OpenSearchTestBasePlugin implements Plugin<Project> {
                     mkdirs(testOutputDir);
                     mkdirs(heapdumpDir);
                     mkdirs(test.getWorkingDir());
-                    mkdirs(test.getWorkingDir().toPath().resolve("temp").toFile());
+                    // Do not mkdir workingDir/temp: Lucene PathUtilsForTesting installs a mock FS and expects to create
+                    // `temp` itself; pre-creating it causes FileAlreadyExistsException and SKIPPED tests (Elassandra side-car).
 
                     // TODO remove once jvm.options are added to test system properties
                     if (BuildParams.getRuntimeJavaVersion() == JavaVersion.VERSION_1_8) {

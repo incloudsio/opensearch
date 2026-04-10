@@ -15,20 +15,30 @@
  */
 package org.elassandra;
 
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope.Scope;
+
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.test.ESSingleNodeTestCase;
 import org.junit.Test;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test default cluster settings.
  * @author vroyer
  */
 //gradle :server:test -Dtests.seed=65E2CF27F286CC89 -Dtests.class=org.elassandra.ClusterSettingsTests -Dtests.security.manager=false -Dtests.locale=en-PH -Dtests.timezone=America/Coral_Harbour
+@ThreadLeakScope(Scope.NONE)
 public class ClusterSettingsTests extends ESSingleNodeTestCase {
-    
+
+    @Test
+    public void smokeSidecarJvm() {
+        assertTrue(true);
+    }
+
     @Override
     public void setUp() throws Exception {
         super.setUp();

@@ -7,6 +7,8 @@
 
 package org.opensearch.test;
 
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope.Scope;
 import com.carrotsearch.randomizedtesting.RandomizedContext;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
@@ -32,6 +34,7 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Priority;
+import org.opensearch.common.network.NetworkModule;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.BigArrays;
@@ -84,14 +87,49 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
 /**
  * Elassandra single-node tests: one shared daemon/node for the JVM (same idea as the legacy ES 6.8 class).
+ * Cassandra + Netty leave long-lived pool threads; do not fail the suite on thread leak (OpenSearchTestCase defaults to SUITE scope).
  */
+@ThreadLeakScope(Scope.NONE)
 public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
 
     private static final Semaphore testMutex = new Semaphore(1);
 
-    public static synchronized void initElassandraDeamon(Settings testSettings, Collection<Class<? extends Plugin>> classpathPlugins) {
+    /**
+     * @param opensearchDataPath absolute path for OpenSearch {@code path.data} / shared data; must live under Lucene's mock filesystem
+     *                           (use {@link #createTempDir()}), not under {@code cassandra.home}/data, or {@link org.opensearch.env.NodeEnvironment} fails on the test FS.
+     */
+    public static synchronized void initElassandraDeamon(
+        Settings testSettings,
+        Collection<Class<? extends Plugin>> classpathPlugins,
+        String opensearchDataPath
+    ) {
         if (ElassandraDaemon.instance == null) {
-            DatabaseDescriptor.daemonInitialization();
+            if (Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "true"))) {
+                DatabaseDescriptor.daemonInitialization(() -> {
+                    String homeProp = System.getProperty("cassandra.home");
+                    if (homeProp == null) {
+                        throw new IllegalStateException("cassandra.home must be set for Elassandra embedded tests");
+                    }
+                    java.io.File home = new java.io.File(homeProp);
+                    org.apache.cassandra.config.Config c = new org.apache.cassandra.config.Config();
+                    c.commitlog_sync = org.apache.cassandra.config.Config.CommitLogSync.periodic;
+                    c.commitlog_sync_period_in_ms = 10000;
+                    c.data_file_directories = new String[] { new java.io.File(home, "data").getPath() };
+                    c.commitlog_directory = new java.io.File(home, "commitlog").getPath();
+                    c.saved_caches_directory = new java.io.File(home, "saved_caches").getPath();
+                    c.hints_directory = new java.io.File(home, "hints").getPath();
+                    c.partitioner = "org.apache.cassandra.dht.Murmur3Partitioner";
+                    c.endpoint_snitch = "org.apache.cassandra.locator.SimpleSnitch";
+                    java.util.Map<String, String> seedParams = java.util.Collections.singletonMap("seeds", "127.0.0.1");
+                    c.seed_provider = new org.apache.cassandra.config.ParameterizedClass(
+                        "org.apache.cassandra.locator.SimpleSeedProvider",
+                        seedParams
+                    );
+                    return c;
+                });
+            } else {
+                DatabaseDescriptor.daemonInitialization();
+            }
             DatabaseDescriptor.createAllDirectories();
 
             CountDownLatch startLatch = new CountDownLatch(1);
@@ -108,9 +146,9 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
                     return Settings.builder()
                         .put("discovery.type", MockCassandraDiscovery.MOCK_CASSANDRA)
                         .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))
-                        .put(Environment.PATH_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
+                        .put(Environment.PATH_DATA_SETTING.getKey(), opensearchDataPath)
                         .put(Environment.PATH_REPO_SETTING.getKey(), System.getProperty("cassandra.home") + "/repo")
-                        .put(Environment.PATH_SHARED_DATA_SETTING.getKey(), DatabaseDescriptor.getAllDataFileLocations()[0] + File.separatorChar + "elasticsearch.data")
+                        .put(Environment.PATH_SHARED_DATA_SETTING.getKey(), opensearchDataPath)
                         .put("transport.type", getTestTransportType())
                         .put(NodeRoles.dataNode())
                         .put(NodeEnvironment.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
@@ -118,17 +156,21 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
                         .put(ScriptService.SCRIPT_DISABLE_MAX_COMPILATIONS_RATE_SETTING.getKey(), true)
                         .put("client.type", "node")
                         .put(settings)
+                        // InternalSettingsPreparer / env can set http.type to ""; ElassandraNode uses real Node + Netty module.
+                        .put(NetworkModule.HTTP_TYPE_SETTING.getKey(), "netty4")
                         .build();
                 }
 
                 @Override
                 public void ringReady() {
+                    super.ringReady();
                     startLatch.countDown();
                 }
             };
 
             Settings elassandraSettings = ElassandraDaemon.instance.nodeSettings(testSettings);
-            ElassandraDaemon.instance.activate(false, false, elassandraSettings, new Environment(elassandraSettings, confPath), classpathPlugins);
+            // createNode must be true so ElassandraNode is constructed; parent ringReady runs activateAndWaitShards.
+            ElassandraDaemon.instance.activate(false, true, elassandraSettings, new Environment(elassandraSettings, confPath), classpathPlugins);
 
             try {
                 startLatch.await();
@@ -140,7 +182,11 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
 
     public ESSingleNodeTestCase() {
         super();
-        initElassandraDeamon(nodeSettings(1), getPlugins());
+        initElassandraDeamon(
+            nodeSettings(1),
+            getPlugins(),
+            createTempDir().resolve("elasticsearch.data").toAbsolutePath().toString()
+        );
     }
 
     protected boolean addMockTransportService() {
@@ -174,12 +220,25 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
         }
 
         if (addMockTransportService()) {
-            mocks.add(getTestTransportPlugin());
+            mocks.add(MockTransportService.TestPlugin.class);
         }
 
+        // nodeSettings() always sets transport.type to getTestTransportType() (mock-nio); the plugin must be on the classpath.
+        mocks.add(getTestTransportPlugin());
+        // ElassandraNode loads only explicit plugins; register Netty HTTP without a test:framework → modules Gradle edge.
+        mocks.add(loadNetty4PluginClass());
         mocks.add(OpenSearchIntegTestCase.TestSeedPlugin.class);
         mocks.add(MockCassandraDiscovery.TestPlugin.class);
         return Collections.unmodifiableList(mocks);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Class<? extends Plugin> loadNetty4PluginClass() {
+        try {
+            return (Class<? extends Plugin>) Class.forName("org.opensearch.transport.Netty4Plugin");
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("org.opensearch.transport.Netty4Plugin must be on the test runtime classpath", e);
+        }
     }
 
     public MockCassandraDiscovery getMockCassandraDiscovery() {
@@ -321,7 +380,7 @@ public abstract class ESSingleNodeTestCase extends OpenSearchTestCase {
     }
 
     protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.emptyList();
+        return getMockPlugins();
     }
 
     @SafeVarargs

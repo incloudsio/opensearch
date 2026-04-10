@@ -28,6 +28,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.WindowsTimer;
 import org.apache.cassandra.service.StorageService;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elassandra.env.EnvironmentLoader;
 import org.elassandra.index.ElasticSecondaryIndex;
@@ -42,7 +43,6 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.CreationException;
 import org.opensearch.common.inject.Injector;
 import org.opensearch.common.inject.spi.Message;
-import org.opensearch.common.logging.Loggers;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.transport.BoundTransportAddress;
 import org.opensearch.env.Environment;
@@ -89,7 +89,7 @@ import static com.google.common.collect.Sets.newHashSet;
  *
  */
 public class ElassandraDaemon extends CassandraDaemon {
-    private static final Logger logger = Loggers.getLogger(ElassandraDaemon.class);
+    private static final Logger logger = LogManager.getLogger(ElassandraDaemon.class);
 
     private static volatile Thread keepAliveThread;
     private static volatile CountDownLatch keepAliveLatch;
@@ -514,13 +514,13 @@ public class ElassandraDaemon extends CassandraDaemon {
         }
 
         if (System.getProperty("es.max-open-files", "false").equals("true")) {
-            Logger logger = Loggers.getLogger(ElassandraDaemon.class);
+            Logger logger = LogManager.getLogger(ElassandraDaemon.class);
             logger.info("max_open_files [{}]", ProcessProbe.getInstance().getMaxFileDescriptorCount());
         }
 
         // warn if running using the client VM
         if (JvmInfo.jvmInfo().getVmName().toLowerCase(Locale.ROOT).contains("client")) {
-            Logger logger = Loggers.getLogger(ElassandraDaemon.class);
+            Logger logger = LogManager.getLogger(ElassandraDaemon.class);
             logger.warn("jvm uses the client vm, make sure to run `java` with the server vm for best performance by adding `-server` to the command line");
         }
 
@@ -603,7 +603,7 @@ public class ElassandraDaemon extends CassandraDaemon {
                 System.err.flush();
                 //Loggers.disableConsoleLogging();
             }
-            Logger logger = Loggers.getLogger(ElassandraDaemon.class);
+            Logger logger = LogManager.getLogger(ElassandraDaemon.class);
             logger.error("Exception", e);
             System.exit(3);
         }
@@ -705,7 +705,7 @@ public class ElassandraDaemon extends CassandraDaemon {
         } else {
             errorMessage.append("- ").append(ExceptionsHelper.detailedMessage(e));
         }
-        if (Loggers.getLogger(ElassandraDaemon.class).isDebugEnabled()) {
+        if (logger.isDebugEnabled()) {
             errorMessage.append("\n").append(ExceptionsHelper.stackTrace(e));
         }
         return errorMessage.toString();
