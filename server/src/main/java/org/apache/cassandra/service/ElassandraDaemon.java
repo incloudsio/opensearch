@@ -127,7 +127,9 @@ public class ElassandraDaemon extends CassandraDaemon {
             // OpenSearchSingleNodeTestCase calls DatabaseDescriptor.daemonInitialization(…) with a programmatic Config
             // before activate(). A second no-arg daemonInitialization() here reloads cassandra.yaml and can corrupt
             // state or abort the forked test JVM early (Gradle exit 100).
-            if (Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "false")) == false) {
+            // Must match OpenSearchSingleNodeTestCase default (true): when unset, skip second init so programmatic
+            // Config (storage_port 17100) from initElassandraDeamon is not replaced by yaml/default 7000.
+            if (!Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "true"))) {
                 DatabaseDescriptor.daemonInitialization();
             }
             DatabaseDescriptor.createAllDirectories();
