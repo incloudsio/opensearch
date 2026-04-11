@@ -913,4 +913,40 @@ public final class ShardRouting implements Writeable, ToXContentObject {
         }
         return false;
     }
+
+    /** Elassandra: Cassandra token ranges attached to this routing (empty if none). */
+    public static ShardRouting newElassandra(
+        ShardId shardId,
+        String currentNodeId,
+        boolean primary,
+        ShardRoutingState state,
+        UnassignedInfo unassignedInfo,
+        Collection<Range<Token>> tokenRanges
+    ) {
+        RecoverySource recoverySource =
+            (!primary)
+                ? PeerRecoverySource.INSTANCE
+                : ((state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING)
+                    ? RecoverySource.LocalShardsRecoverySource.INSTANCE
+                    : null);
+        UnassignedInfo ui =
+            (state == ShardRoutingState.UNASSIGNED || state == ShardRoutingState.INITIALIZING) ? unassignedInfo : null;
+        AllocationId aid =
+            (state == ShardRoutingState.STARTED || state == ShardRoutingState.INITIALIZING)
+                ? AllocationId.newInitializing()
+                : null;
+        return new ShardRouting(
+            shardId,
+            currentNodeId,
+            null,
+            primary,
+            state,
+            recoverySource,
+            ui,
+            aid,
+            UNAVAILABLE_EXPECTED_SHARD_SIZE,
+            tokenRanges
+        );
+    }
+
 }

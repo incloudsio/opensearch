@@ -264,7 +264,7 @@ public abstract class AbstractSearchStrategy {
 
                     // started primary shards (green)
                     ShardRoutingState state = shardsFunc.apply(index, node.uuid());
-                    ShardRouting primaryShardRouting = new ShardRouting(new ShardId(index, shardId), node.getId(), true,
+                    ShardRouting primaryShardRouting = ShardRouting.newElassandra(new ShardId(index, shardId), node.getId(), true,
                             state,
                             unassignedInfo(node, state),
                             Router.this.getTokenRanges(selectedShards().get(node)));
@@ -277,7 +277,7 @@ public abstract class AbstractSearchStrategy {
                         for(DiscoveryNode node2 : Router.this.yellowShards) {
                             // TODO: reflect local unassigned info form the local shard state (created or recovery).
                             // unassigned secondary shards (yellow), so id = null
-                            ShardRouting replicaShardRouting = new ShardRouting(new ShardId(index, shardId), null, false,
+                            ShardRouting replicaShardRouting = ShardRouting.newElassandra(new ShardId(index, shardId), null, false,
                                     ShardRoutingState.UNASSIGNED,
                                     unassignedInfo(node2, ShardRoutingState.UNASSIGNED),
                                     EMPTY_RANGE_TOKEN_LIST);
@@ -300,7 +300,7 @@ public abstract class AbstractSearchStrategy {
                     for(DiscoveryNode node : Router.this.redShards.keySet()) {
                         int  shardId = (localNode.getId().equals(node.getId())) ? 0 : i;
                         // add one unassigned primary shards (red) for orphan token ranges.
-                        ShardRouting primaryShardRouting = new ShardRouting(new ShardId(index, shardId), node.getId(), true,
+                        ShardRouting primaryShardRouting = ShardRouting.newElassandra(new ShardId(index, shardId), node.getId(), true,
                                 ShardRoutingState.UNASSIGNED,
                                 unassignedInfo(node, ShardRoutingState.UNASSIGNED),
                                 Router.this.getTokenRanges(Router.this.redShards.get(node)));

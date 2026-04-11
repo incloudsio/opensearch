@@ -38,6 +38,7 @@ import org.opensearch.common.logging.Loggers;
 import org.opensearch.test.junit.annotations.TestIssueLogging;
 import org.opensearch.test.junit.annotations.TestLogging;
 import org.junit.runner.Description;
+import org.junit.runner.notification.Failure;
 import org.junit.runner.Result;
 import org.junit.runner.notification.RunListener;
 
@@ -88,6 +89,26 @@ public class LoggingListener extends RunListener {
         final TestLogging testLogging = description.getAnnotation(TestLogging.class);
         final TestIssueLogging testIssueLogging = description.getAnnotation(TestIssueLogging.class);
         previousLoggingMap = processTestLogging(testLogging, testIssueLogging);
+    }
+
+    @Override
+    public void testIgnored(final Description description) throws Exception {
+        System.err.println("[opensearch-sidecar-elassandra] testIgnored: " + description);
+        super.testIgnored(description);
+    }
+
+    @Override
+    public void testAssumptionFailure(final Failure failure) {
+        System.err.println(
+            "[opensearch-sidecar-elassandra] AssumptionViolated: "
+                + failure.getTestHeader()
+                + " — "
+                + failure.getMessage()
+        );
+        final Throwable t = failure.getException();
+        if (t != null) {
+            t.printStackTrace(System.err);
+        }
     }
 
     @Override

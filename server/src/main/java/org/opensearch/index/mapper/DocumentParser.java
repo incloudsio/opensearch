@@ -1015,6 +1015,7 @@ public final class DocumentParser {
         return dynamic;
     }
 
+
     // looks up a child mapper, but takes into account field names that expand to objects
     private static Mapper getMapper(final ParseContext context, ObjectMapper objectMapper, String fieldName, String[] subfields) {
         String fieldPath = context.path().pathAsText(fieldName);

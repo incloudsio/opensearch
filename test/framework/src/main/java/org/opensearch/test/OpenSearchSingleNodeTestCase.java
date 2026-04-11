@@ -22,6 +22,7 @@ package org.opensearch.test;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope.Scope;
 import com.carrotsearch.randomizedtesting.RandomizedContext;
+import com.carrotsearch.randomizedtesting.RandomizedRunner;
 import com.google.common.collect.Lists;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.Schema;
@@ -78,13 +79,17 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.Permission;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -101,6 +106,215 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
 
     /** One OpenSearch data root for the JVM singleton daemon; nested {@code elasticsearch.data} + extra {@link #createTempDir()} calls confused the Lucene mock FS. */
     private static volatile String embeddedOpensearchDataPath;
+
+    /**
+     * Delegates every {@link SecurityManager} check to a delegate so embedded Cassandra/OpenSearch behavior is preserved;
+     * logs a stack trace when {@code System.exit} runs (via {@link #checkExit(int)}).
+     */
+    private static final class DelegatingExitTraceSecurityManager extends SecurityManager {
+        private final SecurityManager delegate;
+
+        private DelegatingExitTraceSecurityManager(SecurityManager delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void checkExit(int status) {
+            new Exception("[elassandra.test.trace.system.exit] SecurityManager.checkExit(" + status + ")").printStackTrace(System.err);
+            delegate.checkExit(status);
+        }
+
+        @Override
+        public void checkPermission(Permission perm) {
+            delegate.checkPermission(perm);
+        }
+
+        @Override
+        public void checkPermission(Permission perm, Object context) {
+            delegate.checkPermission(perm, context);
+        }
+
+        @Override
+        public void checkCreateClassLoader() {
+            delegate.checkCreateClassLoader();
+        }
+
+        @Override
+        public void checkAccess(Thread t) {
+            delegate.checkAccess(t);
+        }
+
+        @Override
+        public void checkAccess(ThreadGroup g) {
+            delegate.checkAccess(g);
+        }
+
+        @Override
+        public void checkExec(String cmd) {
+            delegate.checkExec(cmd);
+        }
+
+        @Override
+        public void checkLink(String lib) {
+            delegate.checkLink(lib);
+        }
+
+        @Override
+        public void checkRead(FileDescriptor fd) {
+            delegate.checkRead(fd);
+        }
+
+        @Override
+        public void checkRead(String file) {
+            delegate.checkRead(file);
+        }
+
+        @Override
+        public void checkRead(String file, Object context) {
+            delegate.checkRead(file, context);
+        }
+
+        @Override
+        public void checkWrite(FileDescriptor fd) {
+            delegate.checkWrite(fd);
+        }
+
+        @Override
+        public void checkWrite(String file) {
+            delegate.checkWrite(file);
+        }
+
+        @Override
+        public void checkDelete(String file) {
+            delegate.checkDelete(file);
+        }
+
+        @Override
+        public void checkConnect(String host, int port) {
+            delegate.checkConnect(host, port);
+        }
+
+        @Override
+        public void checkConnect(String host, int port, Object context) {
+            delegate.checkConnect(host, port, context);
+        }
+
+        @Override
+        public void checkListen(int port) {
+            delegate.checkListen(port);
+        }
+
+        @Override
+        public void checkAccept(String host, int port) {
+            delegate.checkAccept(host, port);
+        }
+
+        @Override
+        public void checkMulticast(InetAddress maddr) {
+            delegate.checkMulticast(maddr);
+        }
+
+        @Override
+        public void checkMulticast(InetAddress maddr, byte ttl) {
+            delegate.checkMulticast(maddr, ttl);
+        }
+
+        @Override
+        public void checkPropertiesAccess() {
+            delegate.checkPropertiesAccess();
+        }
+
+        @Override
+        public void checkPropertyAccess(String key) {
+            delegate.checkPropertyAccess(key);
+        }
+
+        @Override
+        public void checkPrintJobAccess() {
+            delegate.checkPrintJobAccess();
+        }
+
+        @Override
+        public void checkPackageAccess(String pkg) {
+            delegate.checkPackageAccess(pkg);
+        }
+
+        @Override
+        public void checkPackageDefinition(String pkg) {
+            delegate.checkPackageDefinition(pkg);
+        }
+
+        @Override
+        public void checkSetFactory() {
+            delegate.checkSetFactory();
+        }
+
+        @Override
+        public void checkSecurityAccess(String target) {
+            delegate.checkSecurityAccess(target);
+        }
+    }
+
+    /**
+     * Cassandra / OpenSearch may install their own {@link SecurityManager} after earlier test setup; call again after
+     * work that might replace it (e.g. end of {@code setUp}, start of {@code tearDown}).
+     */
+    private static boolean isExitTraceEnabled() {
+        return Boolean.getBoolean("elassandra.test.trace.system.exit")
+            || "1".equals(System.getenv("ELASSANDRA_TEST_TRACE_SYSTEM_EXIT"))
+            || "true".equalsIgnoreCase(System.getenv("ELASSANDRA_TEST_TRACE_SYSTEM_EXIT"));
+    }
+
+    /** Not synchronized: Cassandra startup threads can call into code that re-enters here; a static lock deadlocks the ctor. */
+    private static void ensureDelegatingExitTraceSecurityManager() {
+        if (isExitTraceEnabled() == false) {
+            return;
+        }
+        SecurityManager sm = System.getSecurityManager();
+        if (sm instanceof DelegatingExitTraceSecurityManager) {
+            return;
+        }
+        if (sm == null) {
+            System.err.println(
+                "[elassandra.test.trace.system.exit] SecurityManager is null after embedded init; cannot trace System.exit"
+            );
+            return;
+        }
+        System.setSecurityManager(new DelegatingExitTraceSecurityManager(sm));
+        System.err.println(
+            "[elassandra.test.trace.system.exit] wrapped SecurityManager for exit tracing: " + sm.getClass().getName()
+        );
+    }
+
+    /**
+     * {@link com.carrotsearch.randomizedtesting.ThreadLeakControl} calls {@code checkZombies()} at the start of each
+     * test {@link org.junit.runners.model.Statement} <em>before</em> {@code @Before} — too early for instance hooks.
+     * Reset the marker when this class loads so embedded Cassandra / prior suites do not skip every method with
+     * {@code AssumptionViolatedException} ("Leaked background threads present (zombies).").
+     */
+    static {
+        clearRandomizedZombieMarker();
+        if (RandomizedRunner.hasZombieThreads()) {
+            System.err.println(
+                "[elassandra] RandomizedRunner.hasZombieThreads() is true immediately after clearRandomizedZombieMarker()"
+            );
+        }
+        if (Boolean.getBoolean("elassandra.test.shutdown.hook")) {
+            Runtime.getRuntime()
+                .addShutdownHook(
+                    new Thread(
+                        () -> System.err.println("[elassandra.test.shutdown.hook] JVM shutdown hook ran (orderly exit or System.exit)"),
+                        "elassandra-shutdown-hook"
+                    )
+                );
+            Thread.setDefaultUncaughtExceptionHandler(
+                (t, e) -> {
+                    System.err.println("[elassandra.test.uncaught] thread=" + t.getName() + " (" + t.getId() + ")");
+                    e.printStackTrace(System.err);
+                }
+            );
+        }
+    }
 
     /**
      * OpenSearch side-car Gradle runs often set {@code cassandra.config=file:...} without {@code cassandra.config.dir}
@@ -238,6 +452,8 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
             }
         }
         initElassandraDeamon(nodeSettings(1), getPlugins(), embeddedOpensearchDataPath);
+        // Cassandra installs ThreadAwareSecurityManager during daemon init; wrap before @Before / rules can skip the test.
+        ensureDelegatingExitTraceSecurityManager();
     }
 
     /**
@@ -392,11 +608,13 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         if (ElassandraDaemon.instance.node() == null) {
             startNode(seed);
         }
+        ensureDelegatingExitTraceSecurityManager();
     }
 
     @After
     @Override
     public void tearDown() throws Exception {
+        ensureDelegatingExitTraceSecurityManager();
         logger.info("[{}#{}]: cleaning up after test", getTestClass().getSimpleName(), getTestName());
         super.tearDown();
         try {
@@ -427,8 +645,22 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         }
     }
 
+    /** Resets {@link RandomizedRunner}'s static {@code zombieMarker} via reflection; see static class initializer. */
+    private static void clearRandomizedZombieMarker() {
+        try {
+            java.lang.reflect.Field f = RandomizedRunner.class.getDeclaredField("zombieMarker");
+            f.setAccessible(true);
+            // Replace the marker so any stale reference cannot leave the flag true (embedded Cassandra can set it
+            // between suite boundaries in the same JVM).
+            f.set(null, new AtomicBoolean(false));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @BeforeClass
     public static synchronized void setUpClass() throws Exception {
+        clearRandomizedZombieMarker();
     }
 
     @AfterClass
