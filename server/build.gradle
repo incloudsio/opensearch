@@ -349,3 +349,23 @@ tasks.test {
         jvmArgs += ["--add-opens", "java.base/java.nio.file=ALL-UNNAMED"]
     }
 }
+
+// Elassandra-in-OpenSearch: org.elassandra.* compiles against the Cassandra fat jar + extras from
+// gradle/opensearch-sidecar-elassandra.init.gradle (via ./scripts/gradlew-elassandra-sidecar.sh).
+tasks.named('compileJava').configure {
+    doFirst {
+        if (!file('src/main/java/org/elassandra/cluster/SchemaManager.java').exists()) {
+            return
+        }
+        def hasCassandraJar = configurations.compileClasspath.files.any { f ->
+            f.name.startsWith('elassandra-cassandra-') && f.name.endsWith('.jar')
+        }
+        if (!hasCassandraJar) {
+            throw new GradleException(
+                'This checkout includes org.elassandra sources; :server:compileJava needs the Elassandra Cassandra jar on the compile classpath. ' +
+                    'Build the jar in the elassandra repo, then run: ./scripts/gradlew-elassandra-sidecar.sh :server:compileJava ' +
+                    '(or set ELASSANDRA_CASSANDRA_JAR / -Delassandra.cassandra.jar and use --init-script gradle/opensearch-sidecar-elassandra.init.gradle).'
+            )
+        }
+    }
+}

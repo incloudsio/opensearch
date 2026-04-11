@@ -99,8 +99,19 @@ public class Gateway {
             }
         }
         if (found < requiredAllocation) {
-            listener.onFailure("found [" + found + "] metadata states, required [" + requiredAllocation + "]");
-            return;
+            if (found == 0) {
+                // No persisted gateway metadata on disk yet (fresh cluster). Coordinator discovery uses
+                // RecoverStateUpdateTask instead of this path; CassandraDiscovery does not, so we must still
+                // complete recovery with empty metadata or STATE_NOT_RECOVERED_BLOCK never clears.
+                logger.info(
+                    "gateway recovery: found 0 persisted metadata states (required [{}]); bootstrapping empty metadata",
+                    requiredAllocation
+                );
+                electedGlobalState = Metadata.EMPTY_METADATA;
+            } else {
+                listener.onFailure("found [" + found + "] metadata states, required [" + requiredAllocation + "]");
+                return;
+            }
         }
         // update the global state, and clean the indices, we elect them in the next phase
         final Metadata.Builder metadataBuilder = Metadata.builder(electedGlobalState).removeAllIndices();

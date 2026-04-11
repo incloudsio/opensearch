@@ -315,7 +315,8 @@ allprojects {
         } else {
           // Link to non-shadowed dependant projects
           project.javadoc.dependsOn "${upstreamProject.path}:javadoc"
-          String externalLinkName = upstreamProject.archivesBaseName
+          // :libs:opensearch-plugin-classloader and similar may not apply java.archivesBaseName; COD can also touch this before conventions exist.
+          String externalLinkName = (upstreamProject.findProperty('archivesBaseName') ?: upstreamProject.name).toString()
           String artifactPath = dep.group.replaceAll('\\.', '/') + '/' + externalLinkName.replaceAll('\\.', '/') + '/' + dep.version
           project.javadoc.options.linksOffline artifactsHost + "/javadoc/" + artifactPath, "${upstreamProject.buildDir}/docs/javadoc/"
         }

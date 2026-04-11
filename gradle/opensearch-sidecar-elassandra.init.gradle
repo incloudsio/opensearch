@@ -1,0 +1,320 @@
+// Init script: Elassandra Cassandra jar + deps for org.elassandra.* on OpenSearch :server.
+// Jar path: -Delassandra.cassandra.jar=/abs/path/to/elassandra-cassandra-x.y.z.jar
+// Prefer: ./scripts/gradlew-elassandra-sidecar.sh … (sets jar + JAVA11_HOME).
+// Guava is normally forbidden on OpenSearch compileClasspath; run scripts/patch-opensearch-forbidden-deps-for-elassandra.sh on the clone first.
+//
+// If :server:test fails with Lucene mock FS FileAlreadyExistsException on java.io.tmpdir or Gradle worker exit 100:
+// the forked JVM materializes -Djava.io.tmpdir before Lucene’s worker thread runs PathUtilsForTesting.setup().
+// Patches in patch-opensearch-test-base-delete-testrun-before-mkdir.sh / no-precreate-temp reduce stale dirs;
+// a full fix may require Lucene/OpenSearch test-framework changes or different tmpdir wiring.
+
+import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.Classpath
+import org.gradle.process.CommandLineArgumentProvider
+
+class JctoolsBootArgumentProvider implements CommandLineArgumentProvider {
+    private final FileCollection jctoolsConfiguration
+    JctoolsBootArgumentProvider(FileCollection jctoolsConfiguration) { this.jctoolsConfiguration = jctoolsConfiguration }
+    @Classpath
+    FileCollection getClasspath() { return jctoolsConfiguration }
+    @Override
+    Iterable<String> asArguments() {
+        def jf = jctoolsConfiguration.files.find { it.name.startsWith('jctools-core') && it.name.endsWith('.jar') }
+        return (jf != null && jf.isFile()) ? ["-Xbootclasspath/a:${jf.absolutePath}"] : []
+    }
+}
+
+// Resolve jar path (first match wins):
+// 1) JVM -D (may not reach an already-running Gradle daemon — see below)
+// 2) ELASSANDRA_CASSANDRA_JAR (env is not always refreshed on the daemon either)
+// 3) -Pelassandra.cassandra.jar=… — sent with every build; reliable with ./gradlew --daemon
+def jarProp = System.getProperty('elassandra.cassandra.jar')
+if (jarProp == null || jarProp.trim().isEmpty()) {
+    def fromEnv = System.getenv('ELASSANDRA_CASSANDRA_JAR')
+    jarProp = (fromEnv != null && !fromEnv.trim().isEmpty()) ? fromEnv.trim() : null
+}
+if (jarProp == null || jarProp.trim().isEmpty()) {
+    def pp = gradle.startParameter.projectProperties
+    if (pp != null) {
+        def v = pp.get('elassandra.cassandra.jar')
+        if (v != null && !v.toString().trim().isEmpty()) {
+            jarProp = v.toString().trim()
+        }
+    }
+}
+if (jarProp == null || jarProp.trim().isEmpty()) {
+    logger.lifecycle('[opensearch-sidecar-elassandra] Not enabled: pass -Pelassandra.cassandra.jar=/abs/path/elassandra-cassandra-*.jar (recommended), or -D… / ELASSANDRA_CASSANDRA_JAR — use ./scripts/gradlew-elassandra-sidecar.sh')
+    return
+}
+System.setProperty('elassandra.cassandra.jar', jarProp)
+// OpenSearchTestBasePlugin skips -Djava.io.tmpdir when set; we assign a unique OS tmp dir in :server:test doFirst.
+System.setProperty('elassandra.gradle.skip.test.tmpdir', 'true')
+def jarFile = new File(jarProp)
+if (!jarFile.isFile()) {
+    logger.lifecycle("[opensearch-sidecar-elassandra] Skip: jar not found: ${jarFile.absolutePath}")
+    return
+}
+// Cassandra Ant build drops companion jars next to the server artifact (chronicle-*, etc.); Maven coords vary by line.
+def cassandraLibJars = new File(jarFile.parentFile, 'lib/jars')
+
+// Forward Cassandra / JNA / Netty-related system properties from the Gradle JVM (GRADLE_OPTS -D…) to forked :server:test workers.
+def forwardTestSystemProperties = { org.gradle.api.tasks.testing.Test t ->
+    def prefixes = ['cassandra.', 'jna.', 'io.netty.', 'org.apache.cassandra.', 'elassandra.test.']
+    System.properties.each { k, v ->
+        if (v == null || k == null) {
+            return
+        }
+        def ks = k.toString()
+        if (prefixes.any { ks.startsWith(it) }) {
+            t.systemProperty(ks, v.toString())
+        }
+    }
+    def ch = System.getProperty('cassandra.home')
+    if (ch == null || ch.toString().trim().isEmpty()) {
+        ch = System.getenv('ELASSANDRA_GRADLE_CASSANDRA_HOME')
+    }
+    def cc = System.getProperty('cassandra.config')
+    if (cc == null || cc.toString().trim().isEmpty()) {
+        cc = System.getenv('ELASSANDRA_GRADLE_CASSANDRA_CONFIG')
+    }
+    if (ch != null) {
+        t.systemProperty('cassandra.home', ch.toString())
+    }
+    if (cc != null) {
+        t.systemProperty('cassandra.config', cc.toString())
+    }
+}
+
+gradle.projectsEvaluated {
+    Project server = rootProject.findProject(':server')
+    Project testFramework = rootProject.findProject(':test:framework')
+    if (server == null && testFramework == null) {
+        return
+    }
+    def vfile = new File(rootProject.projectDir, 'buildSrc/version.properties')
+    def jacksonDatabind = '2.14.2'
+    def httpclient = '4.5.13'
+    def httpcore = '4.4.12'
+    def netty = '4.1.115.Final'
+    def guava = '32.0.1-jre'
+    if (vfile.isFile()) {
+        vfile.eachLine { line ->
+            def m = (line =~ /^\s*jackson_databind\s*=\s*(\S+)/)
+            if (m.find()) {
+                jacksonDatabind = m.group(1)
+            }
+            m = (line =~ /^\s*httpclient\s*=\s*(\S+)/)
+            if (m.find()) {
+                httpclient = m.group(1)
+            }
+            m = (line =~ /^\s*httpcore\s*=\s*(\S+)/)
+            if (m.find()) {
+                httpcore = m.group(1)
+            }
+            m = (line =~ /^\s*netty\s*=\s*(\S+)/)
+            if (m.find()) {
+                netty = m.group(1)
+            }
+            m = (line =~ /^\s*guava\s*=\s*(\S+)/)
+            if (m.find()) {
+                guava = m.group(1)
+            }
+        }
+    }
+    def deps = {
+        api files(jarFile)
+        if (cassandraLibJars.isDirectory()) {
+            api fileTree(dir: cassandraLibJars, includes: ['chronicle-*.jar'])
+        } else {
+            logger.lifecycle("[opensearch-sidecar-elassandra] No ${cassandraLibJars.absolutePath} — add Chronicle jars from Cassandra build if NoClassDefError on net.openhft.*")
+        }
+        compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+        // Compile against Guava 19 (ES 6.8-era Elassandra); Cassandra runtime needs newer APIs (e.g. HostAndPort.getHost).
+        api 'com.google.guava:guava:19.0'
+        // Guava 28+ splits ListenableFuture internals; test runtime forces guava 32 — failureaccess must be on classpath.
+        api 'com.google.guava:failureaccess:1.0.1'
+        api 'org.antlr:antlr:3.5.2'
+        api 'org.antlr:antlr-runtime:3.5.2'
+        api "com.fasterxml.jackson.core:jackson-databind:${jacksonDatabind}"
+        api "com.fasterxml.jackson.core:jackson-core:${jacksonDatabind}"
+        api "com.fasterxml.jackson.core:jackson-annotations:${jacksonDatabind}"
+        api 'org.apache.commons:commons-lang3:3.12.0'
+        // Cassandra 4 commitlog header (CommitLogDescriptor) uses org.json.simple.JSONValue — missing → NoClassDefError → JVMStabilityInspector exit 100.
+        api 'com.googlecode.json-simple:json-simple:1.1.1'
+        // CassandraRoleManager#hashpw (default role setup) uses org.mindrot.jbcrypt.BCrypt.
+        api 'org.mindrot:jbcrypt:0.4'
+        // StartupChecks#initSigarLibrary loads org.apache.cassandra.utils.SigarLibrary (org.hyperic.sigar.*) — jar required even if native .dylib fails (degraded mode).
+        api 'org.fusesource:sigar:1.6.4'
+        api 'com.clearspring.analytics:stream:2.9.8'
+        api 'org.slf4j:slf4j-api:1.7.36'
+        api "org.apache.httpcomponents:httpclient:${httpclient}"
+        api "org.apache.httpcomponents:httpcore:${httpcore}"
+        // Elassandra tests (CompactionTests) use com.codahale.metrics via Cassandra metrics registry
+        api 'com.codahale.metrics:metrics-core:3.0.2'
+        api 'com.boundary:high-scale-lib:1.0.6'
+        api 'com.github.jbellis:jamm:0.3.0'
+        api 'org.lz4:lz4-java:1.7.1'
+        api 'com.github.ben-manes.caffeine:caffeine:2.9.3'
+        api 'org.jctools:jctools-core:3.3.0'
+        // Cassandra Config / EncryptionOptions static init needs Netty (handler pulls SSL; buffer/common required).
+        api "io.netty:netty-common:${netty}"
+        api "io.netty:netty-buffer:${netty}"
+        api "io.netty:netty-transport:${netty}"
+        api "io.netty:netty-codec:${netty}"
+        api "io.netty:netty-handler:${netty}"
+        // Cassandra / Netty may reference io.netty.channel.epoll.Epoll; classes jar is required on macOS (native .so is Linux-only).
+        api "io.netty:netty-transport-classes-epoll:${netty}"
+    }
+    if (server != null) {
+        server.dependencies deps
+        // Cassandra 4.0 YamlConfigurationLoader expects SnakeYAML 1.x; OpenSearch pins 2.x.
+        ['compileClasspath', 'testCompileClasspath'].each { cn ->
+            def c = server.configurations.findByName(cn)
+            if (c != null) {
+                c.resolutionStrategy {
+                    force 'org.yaml:snakeyaml:1.26'
+                    if (cn == 'testCompileClasspath') {
+                        // OpenSearch pins JNA 5.5.0 (x86-only darwin lib); Apple Silicon needs darwin-aarch64 in 5.12+.
+                        force 'net.java.dev.jna:jna:5.13.0'
+                    }
+                }
+            }
+        }
+        ['runtimeClasspath', 'testRuntimeClasspath'].each { cn ->
+            def c = server.configurations.findByName(cn)
+            if (c != null) {
+                c.resolutionStrategy {
+                    force 'org.yaml:snakeyaml:1.26'
+                    force "com.google.guava:guava:${guava}"
+                    if (cn == 'testRuntimeClasspath') {
+                        force 'net.java.dev.jna:jna:5.13.0'
+                    }
+                }
+            }
+        }
+    }
+    if (testFramework != null) {
+        testFramework.dependencies deps
+    }
+    if (server != null) {
+        def extraCp = server.configurations.maybeCreate('elassandraOpenSearchTestExtra')
+        extraCp.canBeConsumed = false
+        extraCp.canBeResolved = true
+        extraCp.visible = false
+        server.dependencies.add(extraCp.name, 'org.jctools:jctools-core:3.3.0')
+        server.tasks.withType(org.gradle.api.tasks.testing.Test).configureEach { t ->
+            // Stale server/build/test (JUnit XML from older layouts) can confuse incremental test state.
+            // testrun/ is removed at the start of OpenSearchTestBasePlugin's doFirst (patch-opensearch-test-base-delete-testrun-before-mkdir.sh).
+            t.doFirst {
+                // Use the Gradle JVM's java.io.tmpdir (existing OS temp root). A dedicated leaf dir collides with
+                // Lucene's mock layer (JVM creates -Djava.io.tmpdir before Lucene mkdir). Shared /var/.../T is fine.
+                def sysTmp = System.getProperty('java.io.tmpdir', '/tmp')
+                t.systemProperty('java.io.tmpdir', sysTmp)
+                t.jvmArgs("-Djava.io.tmpdir=${sysTmp}")
+                def legacyTestRoot = new File(server.buildDir, 'test')
+                if (legacyTestRoot.exists()) {
+                    server.delete(legacyTestRoot)
+                }
+            }
+            // JaCoCo + embedded Cassandra has been observed to yield flaky / opaque worker exit 100 with SKIPPED tests.
+            try {
+                t.jacoco.enabled = false
+            } catch (Exception ignore) {
+            }
+            t.classpath += extraCp
+            t.jvmArgumentProviders.add(new JctoolsBootArgumentProvider(extraCp))
+            // java.io.tmpdir: overridden in doFirst above (unique dir under OS tmp) so it does not collide with CWD/temp.
+            forwardTestSystemProperties(t)
+            def jvmCh = System.getProperty('cassandra.home')
+            if (jvmCh == null || jvmCh.toString().trim().isEmpty()) {
+                jvmCh = System.getenv('ELASSANDRA_GRADLE_CASSANDRA_HOME')
+            }
+            def jvmCc = System.getProperty('cassandra.config')
+            if (jvmCc == null || jvmCc.toString().trim().isEmpty()) {
+                jvmCc = System.getenv('ELASSANDRA_GRADLE_CASSANDRA_CONFIG')
+            }
+            // Also pass -D on the worker command line (some Gradle 6 / Test worker paths do not apply all
+            // task systemProperty entries to the forked JVM consistently with OpenSearch's providers).
+            if (jvmCh != null) {
+                t.jvmArgs("-Dcassandra.home=${jvmCh}")
+            }
+            if (jvmCc != null) {
+                t.jvmArgs("-Dcassandra.config=${jvmCc}")
+            }
+            def storagePort = System.getProperty('elassandra.test.storage_port')
+            if (storagePort == null || storagePort.toString().trim().isEmpty()) {
+                storagePort = System.getenv('ELASSANDRA_TEST_STORAGE_PORT')
+            }
+            if (storagePort == null || storagePort.toString().trim().isEmpty()) {
+                storagePort = '17100'
+            }
+            t.systemProperty('elassandra.test.storage_port', storagePort.toString())
+            t.jvmArgs("-Delassandra.test.storage_port=${storagePort}")
+            t.jvmArgs('-Djna.nosys=true')
+            // macOS: seccomp-style system call filter can abort the forked test JVM early (EOF to Gradle) when combined with embedded Cassandra.
+            t.jvmArgs('-Dtests.system_call_filter=false')
+            // Embedded Cassandra + JNA + Netty: default test SM often yields opaque failures / SKIPPED (worker exit 100).
+            t.systemProperty('tests.security.manager', 'false')
+            t.jvmArgs('-Dtests.security.manager=false')
+            // Lucene mock FS + Gradle java.io.tmpdir/workingDir layout causes FileAlreadyExistsException (worker exit 100).
+            t.systemProperty('elassandra.disable.lucene.mock.filesystem', 'true')
+            t.jvmArgs('-Delassandra.disable.lucene.mock.filesystem=true')
+            // Embedded Cassandra + OpenSearch is heavy; upstream :server:test defaults to -Xmx512m which can OOM-exit the worker (Gradle reports exit 100).
+            // Embedded Cassandra + OpenSearch single-node can exceed 1536m on Apple Silicon; OOM kills the worker (Gradle exit 100, SKIPPED).
+            t.jvmArgs('-Xmx3072m')
+            // Lucene TestRuleLimitSysouts + verbose Cassandra/OpenSearch logging can exceed default limits; verbose disables strict sysout enforcement.
+            t.jvmArgs('-Dtests.verbose=true')
+            t.jvmArgs('--add-opens', 'java.base/jdk.internal.ref=ALL-UNNAMED')
+            def nettyProcs = System.getProperty('opensearch.set.netty.runtime.available.processors')
+            if (nettyProcs != null) {
+                t.jvmArgs("-Dopensearch.set.netty.runtime.available.processors=${nettyProcs}")
+            }
+            def extraJvm = System.getenv('ELASSANDRA_OPENSEARCH_TEST_EXTRA_JVM_ARGS')
+            if (extraJvm != null && !extraJvm.trim().isEmpty()) {
+                extraJvm.split(/\s+/).each { arg ->
+                    if (arg != null && !arg.isEmpty()) {
+                        t.jvmArgs(arg)
+                    }
+                }
+            }
+            // When debugging fork exit 100 / SKIPPED with no exception: stderr line from the hook means shutdown
+            // hooks ran (so not SIGKILL); typically System.exit or normal JVM teardown — pair with tracing System.exit.
+            if (System.getenv('ELASSANDRA_TEST_SHUTDOWN_HOOK') == '1') {
+                t.systemProperty('elassandra.test.shutdown.hook', 'true')
+                t.jvmArgs('-Delassandra.test.shutdown.hook=true')
+            }
+            // Log stack when System.exit is invoked (wraps Cassandra ThreadAwareSecurityManager). Forked workers need
+            // the env var too — Boolean.getBoolean alone can miss -D from the Gradle CLI on some OpenSearch test setups.
+            def traceExit = System.getenv('ELASSANDRA_TEST_TRACE_SYSTEM_EXIT') == '1' || 'true'.equalsIgnoreCase(System.getenv('ELASSANDRA_TEST_TRACE_SYSTEM_EXIT')) || Boolean.parseBoolean(System.getProperty('elassandra.test.trace.system.exit', 'false'))
+            if (traceExit) {
+                t.systemProperty('elassandra.test.trace.system.exit', 'true')
+                t.jvmArgs('-Delassandra.test.trace.system.exit=true')
+                t.environment('ELASSANDRA_TEST_TRACE_SYSTEM_EXIT', '1')
+            }
+            // Cassandra -da:org.apache.cassandra... is applied in OpenSearchTestBasePlugin (patch-opensearch-test-base-cassandra-disable-asserts-after-ea.sh) so it follows -ea.
+            try {
+                t.testLogging { tl ->
+                    tl.events 'started', 'failed', 'skipped'
+                    tl.showExceptions true
+                    tl.showCauses true
+                    tl.showStackTraces true
+                    tl.showStandardStreams true
+                    tl.exceptionFormat 'full'
+                }
+            } catch (Exception ignore) {
+            }
+            // Forked JVM sometimes exits 100 with only "SKIPPED" in console; log Throwable Gradle attached (e.g. AssumptionViolatedException).
+            t.afterTest { org.gradle.api.tasks.testing.TestDescriptor td, org.gradle.api.tasks.testing.TestResult tr ->
+                if (tr.resultType == org.gradle.api.tasks.testing.TestResult.ResultType.SKIPPED) {
+                    def ex = tr.exception
+                    def msg = ex != null ? (ex.class.name + ': ' + ex.message) : '(no Throwable on TestResult)'
+                    logger.lifecycle("[opensearch-sidecar-elassandra] skipped test: ${td.className} ${td.name} → ${msg}")
+                    if (ex != null) {
+                        ex.printStackTrace()
+                    }
+                }
+            }
+        }
+    }
+    logger.lifecycle("[opensearch-sidecar-elassandra] :server and :test:framework + Cassandra jar + deps (compile guava 19, runtime guava ${guava}) jackson (${jacksonDatabind}) httpclient ${httpclient} netty ${netty}")
+}
