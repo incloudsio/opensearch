@@ -34,6 +34,7 @@ import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.opensearch.core.internal.io.IOUtils;
 import org.opensearch.action.admin.cluster.health.ClusterHealthRequestBuilder;
 import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
@@ -101,6 +102,13 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
  */
 @ThreadLeakScope(Scope.NONE)
 public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
+
+    /**
+     * Captured when this class loads (after parent/Lucene static init). RandomizedRunner compares the JVM default
+     * uncaught handler at suite end; CassandraDaemon replaces it during startup — restore after init, in {@code setUp}, and in {@link #tearDownClass()}.
+     */
+    private static final Thread.UncaughtExceptionHandler UNCAUGHT_BEFORE_ELASSANDRA_TEST =
+        Thread.getDefaultUncaughtExceptionHandler();
 
     private static final Semaphore testMutex = new Semaphore(1);
 
@@ -294,11 +302,13 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
      */
     static {
         clearRandomizedZombieMarker();
-        if (RandomizedRunner.hasZombieThreads()) {
-            System.err.println(
-                "[elassandra] RandomizedRunner.hasZombieThreads() is true immediately after clearRandomizedZombieMarker()"
-            );
-        }
+        // Cassandra's JVMStabilityInspector calls System.exit(100) on fatal errors; killCurrentJVM(t, true) skips
+        // printStackTrace — log here so Gradle output shows the root cause (e.g. commit log during init).
+        JVMStabilityInspector.killerHook = t -> {
+            System.err.println("[elassandra.test] Cassandra JVMStabilityInspector requested JVM exit; cause:");
+            t.printStackTrace(System.err);
+            return !Boolean.getBoolean("elassandra.embedded.suppress.cassandra.jvm.kill");
+        };
         if (Boolean.getBoolean("elassandra.test.shutdown.hook")) {
             Runtime.getRuntime()
                 .addShutdownHook(
@@ -435,6 +445,7 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
                 startLatch.await();
             } catch (InterruptedException e) {
             }
+            Thread.setDefaultUncaughtExceptionHandler(UNCAUGHT_BEFORE_ELASSANDRA_TEST);
         }
     }
 
@@ -580,7 +591,10 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         // SERVICE_UNAVAILABLE/1/state not recovered / initialized block
         ClusterAdminClient clusterAdminClient = client().admin().cluster();
         ClusterHealthRequestBuilder builder = clusterAdminClient.prepareHealth();
-        ClusterHealthResponse clusterHealthResponse = builder.setWaitForGreenStatus().get();
+        // Single-node embedded Elassandra typically reaches yellow (not green); waiting for green hangs until suite timeout.
+        ClusterHealthResponse clusterHealthResponse = builder.setWaitForYellowStatus()
+            .setTimeout(TimeValue.timeValueMinutes(2))
+            .get();
 
         assertFalse(clusterHealthResponse.isTimedOut());
     }
@@ -608,6 +622,7 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         if (ElassandraDaemon.instance.node() == null) {
             startNode(seed);
         }
+        Thread.setDefaultUncaughtExceptionHandler(UNCAUGHT_BEFORE_ELASSANDRA_TEST);
         ensureDelegatingExitTraceSecurityManager();
     }
 
@@ -665,6 +680,7 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
 
     @AfterClass
     public static void tearDownClass() throws IOException {
+        Thread.setDefaultUncaughtExceptionHandler(UNCAUGHT_BEFORE_ELASSANDRA_TEST);
         stopNode();
     }
 
