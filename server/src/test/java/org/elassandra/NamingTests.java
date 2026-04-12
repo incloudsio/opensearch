@@ -21,6 +21,7 @@ import org.opensearch.action.DocWriteResponse;
 import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
@@ -59,9 +60,9 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
                     .endObject()
                 .endObject();
 
-        assertAcked(client().admin().indices().prepareCreate("twitter")
-                .addMapping("_doc", mapping1)
-                .get());
+        // Use base createIndex (not raw prepareCreate().get()): embedded Elassandra can block forever waiting for
+        // active shards / ClusterStateObserver; the helper sets wait-for-active-shards to NONE and bounded health wait.
+        createIndex("twitter", Settings.EMPTY, "_doc", mapping1);
         ensureGreen("twitter");
 
         assertThat(client().prepareIndex("twitter", "_doc", "1")
@@ -87,7 +88,7 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
                 .endObject();
 
         assertThat(client().admin().indices().preparePutTemplate("test_template")
-                .addMapping("_default_", mapping1)
+                .addMapping("_doc", mapping1)
                 .setPatterns(java.util.Collections.singletonList("test_index-*"))
                 .get().isAcknowledged(), equalTo(true));
 

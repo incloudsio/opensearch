@@ -102,6 +102,14 @@ public class RootObjectMapper extends ObjectMapper {
             Explicit<Boolean> enabled,
             Nested nested,
             Dynamic dynamic,
+            CqlMapper.CqlCollection cqlCollection,
+            CqlMapper.CqlStruct cqlStruct,
+            String cqlUdtName,
+            boolean cqlPartialUpdate,
+            boolean cqlPartitionKey,
+            boolean cqlStaticColumn,
+            boolean cqlClusteringKeyDesc,
+            int cqlPrimaryKeyOrder,
             Map<String, Mapper> mappers,
             @Nullable Settings settings
         ) {
@@ -110,6 +118,14 @@ public class RootObjectMapper extends ObjectMapper {
                 name,
                 enabled,
                 dynamic,
+                cqlCollection,
+                cqlStruct,
+                cqlUdtName,
+                cqlPartialUpdate,
+                cqlPartitionKey,
+                cqlStaticColumn,
+                cqlClusteringKeyDesc,
+                cqlPrimaryKeyOrder,
                 mappers,
                 dynamicDateTimeFormatters,
                 dynamicTemplates,
@@ -235,6 +251,14 @@ public class RootObjectMapper extends ObjectMapper {
         String name,
         Explicit<Boolean> enabled,
         Dynamic dynamic,
+        CqlMapper.CqlCollection cqlCollection,
+        CqlMapper.CqlStruct cqlStruct,
+        String cqlUdtName,
+        boolean cqlPartialUpdate,
+        boolean cqlPartitionKey,
+        boolean cqlStaticColumn,
+        boolean cqlClusteringKeyDesc,
+        int cqlPrimaryKeyOrder,
         Map<String, Mapper> mappers,
         Explicit<DateFormatter[]> dynamicDateTimeFormatters,
         Explicit<DynamicTemplate[]> dynamicTemplates,
@@ -242,7 +266,23 @@ public class RootObjectMapper extends ObjectMapper {
         Explicit<Boolean> numericDetection,
         Settings settings
     ) {
-        super(name, name, enabled, Nested.NO, dynamic, mappers, settings);
+        super(
+            name,
+            name,
+            enabled,
+            Nested.NO,
+            dynamic,
+            cqlCollection,
+            cqlStruct,
+            cqlUdtName,
+            cqlPartialUpdate,
+            cqlPartitionKey,
+            cqlStaticColumn,
+            cqlClusteringKeyDesc,
+            cqlPrimaryKeyOrder,
+            mappers,
+            settings
+        );
         this.dynamicTemplates = dynamicTemplates;
         this.dynamicDateTimeFormatters = dynamicDateTimeFormatters;
         this.dateDetection = dateDetection;

@@ -62,6 +62,13 @@ public class TypeParsers {
 
     /** Elassandra mapping extension. */
     public static final String CQL_MANDATORY = "cql_mandatory";
+    public static final String CQL_COLLECTION = "cql_collection";
+    public static final String CQL_STRUCT = "cql_struct";
+    public static final String CQL_UDT_NAME = "cql_udt_name";
+    public static final String CQL_PARTITION_KEY = "cql_partition_key";
+    public static final String CQL_STATIC_COLUMN = "cql_static_column";
+    public static final String CQL_CLUSTERING_KEY_DESC = "cql_clustering_key_desc";
+    public static final String CQL_PRIMARY_KEY_ORDER = "cql_primary_key_order";
 
     public static void checkNull(String propName, Object propNode) {
         if (false == propName.equals("null_value") && propNode == null) {

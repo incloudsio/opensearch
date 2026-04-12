@@ -219,6 +219,14 @@ public class FieldAliasMapperValidationTests extends OpenSearchTestCase {
             new Explicit<>(true, false),
             ObjectMapper.Nested.NO,
             ObjectMapper.Dynamic.FALSE,
+            ObjectMapper.Defaults.CQL_COLLECTION,
+            ObjectMapper.Defaults.CQL_STRUCT,
+            null,
+            ObjectMapper.Defaults.CQL_MANDATORY,
+            ObjectMapper.Defaults.CQL_PARTITION_KEY,
+            ObjectMapper.Defaults.CQL_STATIC_COLUMN,
+            ObjectMapper.Defaults.CQL_CLUSTERING_KEY_DESC,
+            ObjectMapper.Defaults.CQL_PRIMARY_KEY_ORDER,
             emptyMap(),
             Settings.EMPTY
         );
@@ -231,6 +239,14 @@ public class FieldAliasMapperValidationTests extends OpenSearchTestCase {
             new Explicit<>(true, false),
             ObjectMapper.Nested.newNested(),
             ObjectMapper.Dynamic.FALSE,
+            ObjectMapper.Defaults.CQL_COLLECTION,
+            ObjectMapper.Defaults.CQL_STRUCT,
+            null,
+            ObjectMapper.Defaults.CQL_MANDATORY,
+            ObjectMapper.Defaults.CQL_PARTITION_KEY,
+            ObjectMapper.Defaults.CQL_STATIC_COLUMN,
+            ObjectMapper.Defaults.CQL_CLUSTERING_KEY_DESC,
+            ObjectMapper.Defaults.CQL_PRIMARY_KEY_ORDER,
             emptyMap(),
             Settings.EMPTY
         );

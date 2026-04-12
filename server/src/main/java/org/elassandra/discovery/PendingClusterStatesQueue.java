@@ -30,6 +30,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+import static java.util.Comparator.comparingLong;
+import static java.util.Comparator.naturalOrder;
+
 /**
  * A queue that holds all "in-flight" incoming cluster states from the master. Once a master commits a cluster
  * state, it is made available via {@link #getNextClusterStateToProcess()}. The class also takes care of batching
@@ -69,8 +72,16 @@ public class PendingClusterStatesQueue {
         void onNewClusterStateFailed(Exception e);
     }
 
+    /**
+     * Order by cluster state version, then {@link ClusterState#stateUUID()} — version alone is not unique as a map key
+     * when two {@link ClusterState} instances share a version (concurrent local publishes before the applier runs).
+     */
+    private static final Comparator<ClusterState> PENDING_STATE_KEY_ORDER = comparingLong(ClusterState::version).thenComparing(
+        ClusterState::stateUUID,
+        naturalOrder()
+    );
 
-    final ConcurrentSkipListMap<ClusterState, StateProcessedListener> pendingStates = new ConcurrentSkipListMap<>(Comparator.comparingLong(ClusterState::version));
+    final ConcurrentSkipListMap<ClusterState, StateProcessedListener> pendingStates = new ConcurrentSkipListMap<>(PENDING_STATE_KEY_ORDER);
     final Logger logger;
     final int maxQueueSize;
 
@@ -83,7 +94,18 @@ public class PendingClusterStatesQueue {
     public void addPending(ClusterState state, StateProcessedListener listener) {
         logger.trace("adding cluster state version={} metadata={}", state.version(), state.metadata().x2());
         StateProcessedListener previousListener = pendingStates.put(state, listener);
-        assert previousListener == null : "ClusterState "+state.version()+" already pending";
+        if (previousListener != null) {
+            // Same version+UUID key: duplicate publish before applier removed the first entry (e.g. concurrent
+            // MasterService tasks on a single node). Fail the superseded listener so the queue stays consistent.
+            logger.warn(
+                "cluster state version={} uuid={} already pending; failing superseded publish",
+                state.version(),
+                state.stateUUID()
+            );
+            previousListener.onNewClusterStateFailed(
+                new OpenSearchException("superseded by duplicate concurrent cluster state publish")
+            );
+        }
 
         if (pendingStates.size() > maxQueueSize) {
             Map.Entry<ClusterState, StateProcessedListener> entry = pendingStates.firstEntry();

@@ -249,10 +249,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         private final ConcurrentMap<UUID, GossipNode> remoteMembers = new ConcurrentHashMap<>();
 
         public DiscoveryNodes nodes() {
+            // Must use the same id as DiscoveryNode#getId() for the local node. SystemKeyspace.getLocalHostId() can
+            // diverge from TransportService#getLocalNode() in some embedded / test setups; if localNodeId/masterNodeId
+            // do not match the map key in DiscoveryNodes, getMasterNode() returns null and cluster state publish fails.
+            DiscoveryNode local = localNode();
             DiscoveryNodes.Builder nodesBuilder = new DiscoveryNodes.Builder()
-                .localNodeId(SystemKeyspace.getLocalHostId().toString())
-                .masterNodeId(SystemKeyspace.getLocalHostId().toString())
-                .add(localNode());
+                .localNodeId(local.getId())
+                .masterNodeId(local.getId())
+                .add(local);
             for (GossipNode node : remoteMembers.values()) {
                 // filter removed nodes, but keep it to avoid detecting them as new nodes.
                 if (!node.removed) {
@@ -1327,8 +1331,31 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             return false;
         }
 
-        assert newClusterState.nodes().getMasterNode() != null : "received a cluster state without a master";
-        assert !newClusterState.blocks().hasGlobalBlock(NoMasterBlockService.NO_MASTER_BLOCK_ALL) : "received a cluster state with a master block";
+        if (newClusterState.nodes().getMasterNode() == null) {
+            IllegalStateException e = new IllegalStateException(
+                "received a cluster state without a resolvable master (masterNodeId="
+                    + newClusterState.nodes().getMasterNodeId()
+                    + ", localNodeId="
+                    + newClusterState.nodes().getLocalNodeId()
+                    + ")");
+            logger.error(e.getMessage());
+            try {
+                pendingStatesQueue.markAsFailed(newClusterState, e);
+            } catch (Exception inner) {
+                logger.error((java.util.function.Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
+            }
+            return false;
+        }
+        if (newClusterState.blocks().hasGlobalBlock(NoMasterBlockService.NO_MASTER_BLOCK_ALL)) {
+            IllegalStateException e = new IllegalStateException("received a cluster state with a no-master block");
+            logger.error(e.getMessage());
+            try {
+                pendingStatesQueue.markAsFailed(newClusterState, e);
+            } catch (Exception inner) {
+                logger.error((java.util.function.Supplier<?>) () -> new ParameterizedMessage("unexpected exception while failing [{}]", reason), inner);
+            }
+            return false;
+        }
 
         try {
             if (shouldIgnoreOrRejectNewClusterState(logger, currentState, newClusterState)) {
