@@ -80,16 +80,7 @@ public class ClusterService extends AbstractLifecycleComponent {
     public static final String SETTING_CLUSTER_SECONDARY_INDEX_CLASS = "cluster.secondary_index_class";
 
     /** Elassandra: cluster-wide search strategy class (fork parity; matches ES fork {@code cluster.search_strategy_class}). */
-public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.search_strategy_class";
-
-    public static final Setting<String> CLUSTER_SEARCH_STRATEGY_CLASS_SETTING =
-        Setting.simpleString(
-            SETTING_CLUSTER_SEARCH_STRATEGY_CLASS,
-            System.getProperty("es.search_strategy_class", org.elassandra.cluster.routing.PrimaryFirstSearchStrategy.class.getName()),
-            Property.NodeScope,
-            Property.Dynamic
-        );
-
+    public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.search_strategy_class";
 
     public static final Class<?> defaultSecondaryIndexClass = org.elassandra.index.ExtendedElasticSecondaryIndex.class;
 
@@ -439,6 +430,117 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     public boolean hasMetaDataTable() {
         KeyspaceMetadata ksm = Schema.instance.getKeyspaceMetadata(getElasticAdminKeyspaceName());
         return ksm != null && ksm.getTableOrViewNullable(ELASTIC_ADMIN_METADATA_TABLE) != null;
+    }
+
+    /**
+     * Create or update elastic_admin keyspace and metadata_log (Elasticsearch fork ClusterService parity).
+     */
+    public void createOrUpdateElasticAdminKeyspace() {
+        final org.apache.logging.log4j.Logger log = org.apache.logging.log4j.LogManager.getLogger(ClusterService.class);
+        final String ks = getElasticAdminKeyspaceName();
+        final int maxAttempts = Integer.getInteger("elassandra.create_elastic_admin_retry.attempts", 5);
+        org.apache.cassandra.cql3.UntypedResultSet result = org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal(
+            String.format(java.util.Locale.ROOT, "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name='%s'", ks));
+        if (result.isEmpty()) {
+            for (int i = 0; ; i++) {
+                try {
+                    java.util.Map<String, String> replication = new java.util.HashMap<>();
+                    replication.put("class", org.apache.cassandra.locator.NetworkTopologyStrategy.class.getName());
+                    replication.put(org.apache.cassandra.config.DatabaseDescriptor.getLocalDataCenter(), "1");
+                    String createKeyspace = String.format(
+                        java.util.Locale.ROOT,
+                        "CREATE KEYSPACE IF NOT EXISTS \"%s\" WITH replication = %s;",
+                        ks,
+                        org.apache.cassandra.utils.FBUtilities.json(replication).replaceAll("\"", "'")
+                    );
+                    process(
+                        org.apache.cassandra.db.ConsistencyLevel.LOCAL_ONE,
+                        org.apache.cassandra.service.ClientState.forInternalCalls(),
+                        createKeyspace
+                    );
+                    break;
+                } catch (Exception e) {
+                    if (i >= maxAttempts) {
+                        log.error("Failed to create elastic_admin keyspace after {} attempts", maxAttempts, e);
+                        return;
+                    }
+                    log.info("Retrying create elastic_admin keyspace");
+                }
+            }
+        } else {
+            java.util.Map<String, String> replication = result.one().getFrozenTextMap("replication");
+            log.debug("keyspace={} replication={}", ks, replication);
+            if (!org.apache.cassandra.locator.NetworkTopologyStrategy.class.getName().equals(replication.get("class"))) {
+                throw new org.apache.cassandra.exceptions.ConfigurationException(
+                    "Keyspace [" + ks + "] should use " + org.apache.cassandra.locator.NetworkTopologyStrategy.class.getName()
+                );
+            }
+        }
+        result = org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal(
+            String.format(
+                java.util.Locale.ROOT,
+                "SELECT * FROM system_schema.tables WHERE keyspace_name='%s' AND table_name = '%s'",
+                ks,
+                ELASTIC_ADMIN_METADATA_TABLE
+            )
+        );
+        if (result.isEmpty()) {
+            for (int i = 0; ; i++) {
+                try {
+                    String createTable = String.format(
+                        java.util.Locale.ROOT,
+                        "CREATE TABLE IF NOT EXISTS \"%s\".%s ( "
+                            + "    cluster_name text,"
+                            + "    v bigint,"
+                            + "    owner uuid,"
+                            + "    source text,"
+                            + "    ts timestamp,"
+                            + "    version bigint static,"
+                            + "    PRIMARY KEY (cluster_name, v)"
+                            + ") WITH CLUSTERING ORDER BY (v DESC);",
+                        ks,
+                        ELASTIC_ADMIN_METADATA_TABLE
+                    );
+                    process(
+                        org.apache.cassandra.db.ConsistencyLevel.LOCAL_ONE,
+                        org.apache.cassandra.service.ClientState.forInternalCalls(),
+                        createTable
+                    );
+                    org.opensearch.cluster.metadata.Metadata metadata = state().metadata();
+                    String source = String.format(
+                        java.util.Locale.ROOT, "init table %s.%s", ks, ELASTIC_ADMIN_METADATA_TABLE);
+                    String initQ = String.format(
+                        java.util.Locale.ROOT,
+                        "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) "
+                            + "WHERE cluster_name = ? AND v = ? IF version = null",
+                        ks,
+                        ELASTIC_ADMIN_METADATA_TABLE
+                    );
+                    process(
+                        org.apache.cassandra.db.ConsistencyLevel.LOCAL_ONE,
+                        org.apache.cassandra.service.ClientState.forInternalCalls(),
+                        initQ,
+                        java.util.UUID.fromString(org.apache.cassandra.service.StorageService.instance.getLocalHostId()),
+                        metadata.version(),
+                        source,
+                        org.apache.cassandra.config.DatabaseDescriptor.getClusterName(),
+                        metadata.version()
+                    );
+                    break;
+                } catch (Exception e) {
+                    if (i >= maxAttempts) {
+                        log.error(
+                            new org.apache.logging.log4j.message.ParameterizedMessage(
+                                "Failed to create or init table {}.{}", ks, ELASTIC_ADMIN_METADATA_TABLE
+                            ),
+                            e
+                        );
+                        return;
+                    }
+                    log.info("Retrying create elastic_admin metadata table");
+                }
+            }
+        }
     }
 
     /** Block until local shards are started ({@link CassandraShardStartedBarrier}). */

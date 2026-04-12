@@ -1149,6 +1149,10 @@ public class Node implements Closeable {
             }
         }
 
+        // Elassandra: post-discovery elastic_admin + ring block (ES fork Node.start() parity)
+        clusterService.createOrUpdateElasticAdminKeyspace();
+        injector.getInstance(org.elassandra.gateway.CassandraGatewayService.class).enableMetaDataPersictency();
+
         injector.getInstance(HttpServerTransport.class).start();
 
         if (WRITE_PORTS_FILE_SETTING.get(settings())) {

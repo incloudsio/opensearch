@@ -56,7 +56,11 @@ public class CassandraShardStartedBarrier implements ClusterStateApplier  {
     public void blockUntilShardsStarted() {
         try {
             logger.debug("Waiting latch={}", latch.getCount());
-            if (latch.await(600, TimeUnit.SECONDS))
+            int sec = Integer.getInteger("elassandra.test.shard.barrier.wait.seconds", 600);
+            if (sec < 1) {
+                sec = 1;
+            }
+            if (latch.await(sec, TimeUnit.SECONDS))
                 logger.debug("All local shards ready to index.");
             else
                 logger.error("Some local shards not ready to index, clusterState = {}", clusterService.state());

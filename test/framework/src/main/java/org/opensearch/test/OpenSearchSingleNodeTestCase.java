@@ -595,23 +595,39 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         return node;
     }
 
-    protected void startNode(long seed) throws Exception {
-        ElassandraDaemon.instance.node(RandomizedContext.current().runWithPrivateRandomness(seed, this::newNode));
+    /**
+     * Wait until the local node is master, gateway recovery cleared {@link GatewayService#STATE_NOT_RECOVERED_BLOCK},
+     * and the global &quot;no cassandra ring&quot; block (id 12, see {@link #NO_CASSANDRA_RING_BLOCK_ID}) is released.
+     * That block is removed asynchronously in {@code Node.start()} via {@code CassandraGatewayService#enableMetaDataPersictency()},
+     * so it can still be present when {@code Node.start()} returns — tests that call {@code createIndex} too early hit
+     * {@code MasterNotDiscoveredException} / index blocks. {@link #setUp()} invokes this once per test after optionally
+     * {@link #startNode(long)} (the singleton may already exist from static {@code activate()}).
+     */
+    /** Same id as {@code CassandraGatewayService.NO_CASSANDRA_RING_BLOCK} (test framework cannot import server). */
+    private static final int NO_CASSANDRA_RING_BLOCK_ID = 12;
+
+    protected void waitUntilMasterAndGatewayRecovered() throws Exception {
         ClusterService cs = clusterService();
-        long waitMinutes = Long.getLong("elassandra.test.master.wait.minutes", 15L);
+        long waitMinutes = Long.getLong("elassandra.test.master.wait.minutes", 5L);
         long deadline = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(waitMinutes);
         while (System.currentTimeMillis() < deadline) {
             org.opensearch.cluster.ClusterState state = cs.state();
             if (state.nodes().isLocalNodeElectedMaster()
-                && !state.blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK)) {
+                && !state.blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK)
+                && !state.blocks().hasGlobalBlockWithId(NO_CASSANDRA_RING_BLOCK_ID)) {
                 return;
             }
             Thread.sleep(200L);
         }
         org.opensearch.cluster.ClusterState failed = cs.state();
         throw new IllegalStateException(
-            "Embedded node did not become master / finish gateway recovery within " + waitMinutes
+            "Embedded node did not become master / finish gateway recovery / release cassandra ring block within "
+                + waitMinutes
                 + " minutes (override with -Delassandra.test.master.wait.minutes=N). Last state: " + failed);
+    }
+
+    protected void startNode(long seed) throws Exception {
+        ElassandraDaemon.instance.node(RandomizedContext.current().runWithPrivateRandomness(seed, this::newNode));
     }
 
     private static void stopNode() throws IOException {
@@ -637,6 +653,9 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         if (ElassandraDaemon.instance.node() == null) {
             startNode(seed);
         }
+        // Always wait: static init may have created the node via activate() before the first @Before, so we cannot
+        // rely on startNode() having run. Do not duplicate wait inside startNode — one place avoids long hangs when stuck.
+        waitUntilMasterAndGatewayRecovered();
         Thread.setDefaultUncaughtExceptionHandler(UNCAUGHT_BEFORE_ELASSANDRA_TEST);
         ensureDelegatingExitTraceSecurityManager();
     }

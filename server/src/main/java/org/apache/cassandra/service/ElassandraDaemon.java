@@ -219,6 +219,9 @@ public class ElassandraDaemon extends CassandraDaemon {
         if (this.node != null) {
             try {
                 this.node.injector().getInstance(ClusterService.class).submitNumberOfShardsAndReplicasUpdate("user-keyspaces-bootstraped", null);
+                // Must run before start(): gateway recovery (clears STATE_NOT_RECOVERED_BLOCK) runs in activate().
+                // If start() runs first, ringReady()'s second activate() is a lifecycle no-op and the barrier never clears.
+                this.node.activate();
                 this.node.start();
             } catch (NodeValidationException e) {
                 throw new RuntimeException(e);

@@ -34,12 +34,15 @@ package org.opensearch.gateway;
 
 import org.opensearch.common.inject.AbstractModule;
 
+import org.elassandra.gateway.CassandraGatewayService;
+
 public class GatewayModule extends AbstractModule {
 
     @Override
     protected void configure() {
         bind(DanglingIndicesState.class).asEagerSingleton();
-        bind(GatewayService.class).asEagerSingleton();
+        // Elassandra: bind GatewayService to CassandraGatewayService (ES fork GatewayModule parity)
+        bind(GatewayService.class).to(CassandraGatewayService.class).asEagerSingleton();
         bind(TransportNodesListGatewayMetaState.class).asEagerSingleton();
         bind(TransportNodesListGatewayStartedShards.class).asEagerSingleton();
         bind(LocalAllocateDangledIndices.class).asEagerSingleton();
