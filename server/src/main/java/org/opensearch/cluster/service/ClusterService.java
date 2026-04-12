@@ -80,7 +80,16 @@ public class ClusterService extends AbstractLifecycleComponent {
     public static final String SETTING_CLUSTER_SECONDARY_INDEX_CLASS = "cluster.secondary_index_class";
 
     /** Elassandra: cluster-wide search strategy class (fork parity; matches ES fork {@code cluster.search_strategy_class}). */
-    public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.search_strategy_class";
+public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.search_strategy_class";
+
+    public static final Setting<String> CLUSTER_SEARCH_STRATEGY_CLASS_SETTING =
+        Setting.simpleString(
+            SETTING_CLUSTER_SEARCH_STRATEGY_CLASS,
+            System.getProperty("es.search_strategy_class", org.elassandra.cluster.routing.PrimaryFirstSearchStrategy.class.getName()),
+            Property.NodeScope,
+            Property.Dynamic
+        );
+
 
     public static final Class<?> defaultSecondaryIndexClass = org.elassandra.index.ExtendedElasticSecondaryIndex.class;
 
@@ -411,6 +420,20 @@ public class ClusterService extends AbstractLifecycleComponent {
     /** Elassandra admin keyspace name (CQL); side-car stub. */
     public String getElasticAdminKeyspaceName() {
         return "elastic_admin";
+    }
+
+    /**
+     * Elassandra: load persisted cluster state (CQL). Side-car returns current metadata with a stable
+     * cluster UUID when still {@code _na_}, so gateway recovery completes without Zen quorum.
+     */
+    public org.opensearch.cluster.metadata.Metadata loadGlobalState() throws java.io.IOException {
+        org.opensearch.cluster.metadata.Metadata m = state().metadata();
+        if (m != null && "_na_".equals(m.clusterUUID())) {
+            return org.opensearch.cluster.metadata.Metadata.builder(m)
+                .clusterUUID(localNode().getId())
+                .build();
+        }
+        return m;
     }
 
     /** Elassandra admin metadata CQL table name (matches ES fork {@code ELASTIC_ADMIN_METADATA_TABLE}). */

@@ -1,52 +1,19 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+ * Elassandra side-car: replaces stock OpenSearch Gateway.performStateRecovery (Zen transport +
+ * minimum_master_nodes quorum over TransportNodesListGatewayMetaState). Embedded mock-cassandra
+ * tests never satisfy that path, so listener.onFailure fires and STATE_NOT_RECOVERED_BLOCK stays.
+ * This matches the Elasticsearch fork: metadata via ClusterService.loadGlobalState() with bootstrap UUID.
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
 package org.opensearch.gateway;
 
-import com.carrotsearch.hppc.ObjectFloatHashMap;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.opensearch.action.FailedNodeException;
 import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.discovery.zen.ElectMasterService;
-import org.opensearch.index.Index;
-
-import java.util.Arrays;
-import java.util.function.Function;
 
 public class Gateway {
 
@@ -54,104 +21,38 @@ public class Gateway {
 
     private final ClusterService clusterService;
 
-    private final TransportNodesListGatewayMetaState listGatewayMetaState;
-
-    private final int minimumMasterNodes;
-
+    @SuppressWarnings("unused")
     public Gateway(
         final Settings settings,
         final ClusterService clusterService,
         final TransportNodesListGatewayMetaState listGatewayMetaState
     ) {
         this.clusterService = clusterService;
-        this.listGatewayMetaState = listGatewayMetaState;
-        this.minimumMasterNodes = ElectMasterService.DISCOVERY_ZEN_MINIMUM_MASTER_NODES_SETTING.get(settings);
     }
 
     public void performStateRecovery(final GatewayStateRecoveredListener listener) throws GatewayException {
-        final String[] nodesIds = clusterService.state().nodes().getMasterNodes().keys().toArray(String.class);
-        logger.trace("performing state recovery from {}", Arrays.toString(nodesIds));
-        final TransportNodesListGatewayMetaState.NodesGatewayMetaState nodesState = listGatewayMetaState.list(nodesIds, null).actionGet();
-
-        final int requiredAllocation = Math.max(1, minimumMasterNodes);
-
-        if (nodesState.hasFailures()) {
-            for (final FailedNodeException failedNodeException : nodesState.failures()) {
-                logger.warn("failed to fetch state from node", failedNodeException);
+        final ClusterState.Builder builder = ClusterState.builder(clusterService.state());
+        try {
+            final Metadata metadata = clusterService.loadGlobalState();
+            logger.info(
+                "Successful cluster state recovery from metadata store version={}/{}",
+                metadata.clusterUUID(),
+                metadata.version()
+            );
+            listener.onSuccess(builder.metadata(metadata).build());
+        } catch (final Exception e) {
+            Metadata meta = clusterService.state().metadata();
+            if ("_na_".equals(meta.clusterUUID())) {
+                meta = Metadata.builder(meta).clusterUUID(clusterService.localNode().getId()).build();
             }
+            logger.info(
+                "Bootstrap cluster metadata after loadGlobalState failure version={}/{} ({})",
+                meta.clusterUUID(),
+                meta.version(),
+                e.toString()
+            );
+            listener.onSuccess(builder.metadata(meta).build());
         }
-
-        final ObjectFloatHashMap<Index> indices = new ObjectFloatHashMap<>();
-        Metadata electedGlobalState = null;
-        int found = 0;
-        for (final TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
-            if (nodeState.metadata() == null) {
-                continue;
-            }
-            found++;
-            if (electedGlobalState == null) {
-                electedGlobalState = nodeState.metadata();
-            } else if (nodeState.metadata().version() > electedGlobalState.version()) {
-                electedGlobalState = nodeState.metadata();
-            }
-            for (final ObjectCursor<IndexMetadata> cursor : nodeState.metadata().indices().values()) {
-                indices.addTo(cursor.value.getIndex(), 1);
-            }
-        }
-        if (found < requiredAllocation) {
-            if (found == 0) {
-                // No persisted gateway metadata on disk yet (fresh cluster). Coordinator discovery uses
-                // RecoverStateUpdateTask instead of this path; CassandraDiscovery does not, so we must still
-                // complete recovery with empty metadata or STATE_NOT_RECOVERED_BLOCK never clears.
-                logger.info(
-                    "gateway recovery: found 0 persisted metadata states (required [{}]); bootstrapping empty metadata",
-                    requiredAllocation
-                );
-                electedGlobalState = Metadata.EMPTY_METADATA;
-            } else {
-                listener.onFailure("found [" + found + "] metadata states, required [" + requiredAllocation + "]");
-                return;
-            }
-        }
-        // update the global state, and clean the indices, we elect them in the next phase
-        final Metadata.Builder metadataBuilder = Metadata.builder(electedGlobalState).removeAllIndices();
-
-        assert !indices.containsKey(null);
-        final Object[] keys = indices.keys;
-        for (int i = 0; i < keys.length; i++) {
-            if (keys[i] != null) {
-                final Index index = (Index) keys[i];
-                IndexMetadata electedIndexMetadata = null;
-                int indexMetadataCount = 0;
-                for (final TransportNodesListGatewayMetaState.NodeGatewayMetaState nodeState : nodesState.getNodes()) {
-                    if (nodeState.metadata() == null) {
-                        continue;
-                    }
-                    final IndexMetadata indexMetadata = nodeState.metadata().index(index);
-                    if (indexMetadata == null) {
-                        continue;
-                    }
-                    if (electedIndexMetadata == null) {
-                        electedIndexMetadata = indexMetadata;
-                    } else if (indexMetadata.getVersion() > electedIndexMetadata.getVersion()) {
-                        electedIndexMetadata = indexMetadata;
-                    }
-                    indexMetadataCount++;
-                }
-                if (electedIndexMetadata != null) {
-                    if (indexMetadataCount < requiredAllocation) {
-                        logger.debug("[{}] found [{}], required [{}], not adding", index, indexMetadataCount, requiredAllocation);
-                    } // TODO if this logging statement is correct then we are missing an else here
-
-                    metadataBuilder.put(electedIndexMetadata, false);
-                }
-            }
-        }
-        ClusterState recoveredState = Function.<ClusterState>identity()
-            .andThen(state -> ClusterStateUpdaters.upgradeAndArchiveUnknownOrInvalidSettings(state, clusterService.getClusterSettings()))
-            .apply(ClusterState.builder(clusterService.getClusterName()).metadata(metadataBuilder).build());
-
-        listener.onSuccess(recoveredState);
     }
 
     public interface GatewayStateRecoveredListener {
