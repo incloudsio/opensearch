@@ -33,9 +33,13 @@
 package org.opensearch.index.mapper;
 
 import org.opensearch.Version;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.logging.log4j.Logger;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.compress.CompressedXContent;
+import org.apache.logging.log4j.LogManager;
 import org.opensearch.common.time.DateFormatter;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.xcontent.NamedXContentRegistry;
@@ -48,6 +52,7 @@ import org.opensearch.index.similarity.SimilarityService;
 import org.opensearch.indices.mapper.MapperRegistry;
 import org.opensearch.script.ScriptService;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -61,6 +66,7 @@ public class DocumentMapperParser {
     private final NamedXContentRegistry xContentRegistry;
     private final SimilarityService similarityService;
     private final Supplier<QueryShardContext> queryShardContextSupplier;
+    private static final Logger logger = LogManager.getLogger(DocumentMapperParser.class);
 
     private final RootObjectMapper.TypeParser rootObjectTypeParser = new RootObjectMapper.TypeParser();
 
@@ -245,6 +251,12 @@ public class DocumentMapperParser {
             mapping = new Tuple<>(rootName, (Map<String, Object>) root.get(rootName));
         } else {
             mapping = new Tuple<>(type, root);
+        }
+
+        try {
+            this.mapperService.discoverTableMapping(mapping.v1(), mapping.v2());
+        } catch (SyntaxException | ConfigurationException | IOException e) {
+            logger.error("Failed to expand mapping", e);
         }
         return mapping;
     }

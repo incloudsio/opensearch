@@ -676,6 +676,10 @@ public abstract class ParametrizedFieldMapper extends FieldMapper {
                 } else {
                     parameter = paramsMap.get(propName);
                 }
+                if (parameter == null && propName.startsWith("cql_")) {
+                    iterator.remove();
+                    continue;
+                }
                 if (parameter == null) {
                     if (isDeprecatedParameter(propName, parserContext.indexVersionCreated())) {
                         deprecationLogger.deprecate(

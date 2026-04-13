@@ -33,7 +33,29 @@
 package org.opensearch.index.mapper;
 
 import com.carrotsearch.hppc.cursors.ObjectCursor;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 import org.apache.logging.log4j.message.ParameterizedMessage;
+import org.apache.cassandra.cql3.CQL3Type;
+import org.apache.cassandra.cql3.CQLFragmentParser;
+import org.apache.cassandra.cql3.ColumnIdentifier;
+import org.apache.cassandra.cql3.CqlParser;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.cql3.UntypedResultSet.Row;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.ListType;
+import org.apache.cassandra.db.marshal.MapType;
+import org.apache.cassandra.db.marshal.SetType;
+import org.apache.cassandra.db.marshal.UserType;
+import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.exceptions.SyntaxException;
+import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.schema.TableMetadata;
+import org.elassandra.cluster.SchemaManager;
+import org.elassandra.index.ElasticSecondaryIndex;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.DelegatingAnalyzerWrapper;
 import org.opensearch.Assertions;
@@ -85,6 +107,7 @@ import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.unmodifiableMap;
@@ -796,6 +819,135 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
     /** Elassandra: Cassandra keyspace backing this index. */
     public String keyspace() {
         return getIndexMetadata().keyspace();
+    }
+
+    public void buildNativeOrUdtMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
+        CQL3Type cql3type = type.asCQL3Type();
+        if (cql3type instanceof CQL3Type.Native) {
+            String esType = SchemaManager.cqlMapping.get(cql3type.toString());
+            if (esType != null) {
+                mapping.put("type", esType);
+            } else {
+                logger.error("CQL type " + cql3type.toString() + " not supported");
+                throw new IOException("CQL type " + cql3type.toString() + " not supported");
+            }
+        } else if (cql3type instanceof CQL3Type.UserDefined) {
+            UserType userType = (UserType) type;
+            mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
+            mapping.put(TypeParsers.CQL_STRUCT, "udt");
+            mapping.put(TypeParsers.CQL_UDT_NAME, userType.getNameAsString());
+            Map<String, Object> properties = Maps.newHashMap();
+            for (int i = 0; i < userType.size(); i++) {
+                Map<String, Object> fieldProps = Maps.newHashMap();
+                buildCollectionMapping(fieldProps, userType.type(i));
+                properties.put(userType.fieldNameAsString(i), fieldProps);
+            }
+            mapping.put("properties", properties);
+        }
+    }
+
+    private void buildCollectionMapping(Map<String, Object> mapping, final AbstractType<?> type) throws IOException {
+        if (type.isCollection()) {
+            if (type instanceof ListType) {
+                mapping.put(TypeParsers.CQL_COLLECTION, "list");
+                buildNativeOrUdtMapping(mapping, ((ListType<?>) type).getElementsType());
+            } else if (type instanceof SetType) {
+                mapping.put(TypeParsers.CQL_COLLECTION, "set");
+                buildNativeOrUdtMapping(mapping, ((SetType<?>) type).getElementsType());
+            } else if (type instanceof MapType) {
+                MapType<?, ?> mtype = (MapType<?, ?>) type;
+                if (mtype.getKeysType().asCQL3Type() == CQL3Type.Native.TEXT && (mtype.getValuesType().isUDT() || !mtype.getValuesType().isCollection())) {
+                    mapping.put(TypeParsers.CQL_COLLECTION, "singleton");
+                    mapping.put(TypeParsers.CQL_STRUCT, "opaque_map");
+                    mapping.put(TypeParsers.CQL_MANDATORY, Boolean.TRUE);
+                    mapping.put("type", ObjectMapper.NESTED_CONTENT_TYPE);
+
+                    Map<String, Object> properties = Maps.newHashMap();
+                    Map<String, Object> fieldProps = Maps.newHashMap();
+                    buildCollectionMapping(fieldProps, mtype.getValuesType());
+                    properties.put("_key", fieldProps);
+                    mapping.put("properties", properties);
+                } else {
+                    throw new IOException("Expecting a map<text,?>");
+                }
+            }
+        } else {
+            mapping.put(TypeParsers.CQL_COLLECTION, "singleton");
+            buildNativeOrUdtMapping(mapping, type);
+        }
+    }
+
+    /**
+     * Mapping property to discover mapping from CQL schema for columns matching the provided regular expression.
+     */
+    public static String DISCOVER = "discover";
+
+    public Map<String, Object> discoverTableMapping(final String type, Map<String, Object> mapping)
+        throws IOException, SyntaxException, ConfigurationException {
+        final String columnRegexp = (String) mapping.get(DISCOVER);
+        final String cfName = SchemaManager.typeToCfName(keyspace(), type);
+        if (columnRegexp != null) {
+            mapping.remove(DISCOVER);
+            Pattern pattern = Pattern.compile(columnRegexp);
+            Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
+            if (properties == null) {
+                properties = Maps.newHashMap();
+                mapping.put("properties", properties);
+            }
+            String ksName = keyspace();
+            KeyspaceMetadata ksm = Schema.instance.getKeyspaceMetadata(ksName);
+            try {
+                TableMetadata metadata = SchemaManager.getTableMetadata(ksName, cfName);
+                List<String> pkColNames = new ArrayList<String>(metadata.partitionKeyColumns().size() + metadata.clusteringColumns().size());
+                for (ColumnMetadata cd : Iterables.concat(metadata.partitionKeyColumns(), metadata.clusteringColumns())) {
+                    pkColNames.add(cd.name.toString());
+                }
+
+                UntypedResultSet result = QueryProcessor.executeOnceInternal(
+                    "SELECT column_name, type FROM system_schema.columns WHERE keyspace_name=? and table_name=?",
+                    new Object[] { keyspace(), cfName }
+                );
+                for (Row row : result) {
+                    String columnName = row.getString("column_name");
+                    if (row.has("type")
+                        && pattern.matcher(columnName).matches()
+                        && columnName.startsWith("_") == false
+                        && ElasticSecondaryIndex.ES_QUERY.equals(columnName) == false
+                        && ElasticSecondaryIndex.ES_OPTIONS.equals(columnName) == false) {
+                        Map<String, Object> props = (Map<String, Object>) properties.get(columnName);
+                        if (props == null) {
+                            props = Maps.newHashMap();
+                            properties.put(columnName, props);
+                        }
+                        int pkOrder = pkColNames.indexOf(columnName);
+                        if (pkOrder >= 0) {
+                            props.put(TypeParsers.CQL_PRIMARY_KEY_ORDER, pkOrder);
+                            if (pkOrder < metadata.partitionKeyColumns().size()) {
+                                props.put(TypeParsers.CQL_PARTITION_KEY, true);
+                            }
+                        }
+                        ColumnMetadata colDef = metadata.getColumn(new ColumnIdentifier(columnName, true));
+                        if (colDef.isStatic()) {
+                            props.put(TypeParsers.CQL_STATIC_COLUMN, true);
+                        }
+                        if (colDef.clusteringOrder() == ColumnMetadata.ClusteringOrder.DESC) {
+                            props.put(TypeParsers.CQL_CLUSTERING_KEY_DESC, true);
+                        }
+                        CQL3Type.Raw rawType = CQLFragmentParser.parseAny(CqlParser::comparatorType, row.getString("type"), "CQL type");
+                        AbstractType<?> atype = rawType.prepare(ksm.name, ksm.types).getType();
+                        buildCollectionMapping(props, atype);
+                    }
+                }
+                if (logger.isDebugEnabled()) {
+                    logger.debug("mapping {} : {}", cfName, mapping);
+                }
+                return mapping;
+            } catch (IOException | SyntaxException | ConfigurationException e) {
+                logger.warn("Failed to build elasticsearch mapping " + ksName + "." + cfName, e);
+                throw e;
+            }
+        }
+        return mapping;
     }
 
     /** Elassandra: legacy per-type mapping names (single-type indices use {@link #SINGLE_MAPPING_NAME}). */

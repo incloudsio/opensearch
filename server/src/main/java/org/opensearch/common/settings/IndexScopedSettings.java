@@ -31,6 +31,7 @@
 
 package org.opensearch.common.settings;
 
+import org.elassandra.cluster.ElassandraIndexSettings;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MetadataIndexStateService;
 import org.opensearch.cluster.routing.UnassignedInfo;
@@ -95,6 +96,21 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
                 IndexMetadata.INDEX_BLOCKS_READ_ONLY_ALLOW_DELETE_SETTING,
                 IndexMetadata.INDEX_PRIORITY_SETTING,
                 IndexMetadata.INDEX_DATA_PATH_SETTING,
+                IndexMetadata.INDEX_SETTING_KEYSPACE_SETTING,
+                IndexMetadata.INDEX_SETTING_TABLE_SETTING,
+                IndexMetadata.INDEX_SETTING_TABLE_OPTIONS_SETTING,
+                IndexMetadata.INDEX_SETTING_VIRTUAL_SETTING,
+                IndexMetadata.INDEX_SETTING_VIRTUAL_INDEX_SETTING,
+                IndexMetadata.INDEX_SETTING_REPLICATION_SETTING,
+                ElassandraIndexSettings.INDEX_SYNCHRONOUS_REFRESH_SETTING,
+                ElassandraIndexSettings.INDEX_SNAPSHOT_WITH_SSTABLE_SETTING,
+                ElassandraIndexSettings.INDEX_INCLUDE_HOST_ID_SETTING,
+                ElassandraIndexSettings.INDEX_INDEX_ON_COMPACTION_SETTING,
+                ElassandraIndexSettings.INDEX_INDEX_STATIC_COLUMNS_SETTING,
+                ElassandraIndexSettings.INDEX_INDEX_STATIC_ONLY_SETTING,
+                ElassandraIndexSettings.INDEX_INDEX_STATIC_DOCUMENT_SETTING,
+                ElassandraIndexSettings.INDEX_INDEX_INSERT_ONLY_SETTING,
+                ElassandraIndexSettings.INDEX_INDEX_OPAQUE_STORAGE_SETTING,
                 IndexMetadata.INDEX_FORMAT_SETTING,
                 IndexMetadata.INDEX_HIDDEN_SETTING,
                 SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING,

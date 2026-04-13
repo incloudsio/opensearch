@@ -37,6 +37,7 @@ import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.schema.Schema;
+import org.elassandra.cluster.SchemaManager;
 import org.elassandra.discovery.CassandraDiscovery;
 import org.elassandra.shard.CassandraShardStartedBarrier;
 import org.opensearch.cluster.ClusterName;
@@ -114,6 +115,8 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
 
     private volatile CassandraDiscovery cassandraDiscovery;
 
+    private final SchemaManager schemaManager;
+
     private final CassandraShardStartedBarrier cassandraShardStartedBarrier;
 
     public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool) {
@@ -140,6 +143,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
         // Add a no-op update consumer so changes are logged
         this.clusterSettings.addAffixUpdateConsumer(USER_DEFINED_METADATA, (first, second) -> {}, (first, second) -> {});
         this.clusterApplierService = clusterApplierService;
+        this.schemaManager = new SchemaManager(settings, this);
         this.cassandraShardStartedBarrier = new CassandraShardStartedBarrier(settings, this);
     }
 
@@ -159,6 +163,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
 
     @Override
     protected synchronized void doStart() {
+        Schema.instance.registerListener(schemaManager.getSchemaListener());
         clusterApplierService.start();
         masterService.start();
     }
@@ -167,6 +172,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     protected synchronized void doStop() {
         masterService.stop();
         clusterApplierService.stop();
+        Schema.instance.unregisterListener(schemaManager.getSchemaListener());
     }
 
     @Override
@@ -396,7 +402,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     }
 
     public org.elassandra.cluster.SchemaManager getSchemaManager() {
-        return null;
+        return schemaManager;
     }
 
     public void writeMetadataToSchemaMutations(

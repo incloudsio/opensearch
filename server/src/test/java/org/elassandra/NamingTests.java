@@ -15,6 +15,7 @@
  */
 package org.elassandra;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.opensearch.action.DocWriteResponse;
@@ -26,6 +27,9 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
+
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -36,8 +40,44 @@ import static org.hamcrest.Matchers.equalTo;
  */
 public class NamingTests extends OpenSearchSingleNodeTestCase {
 
+    private void waitForKeyspace(String keyspace) throws Exception {
+        assertBusy(() -> {
+            UntypedResultSet results = process(
+                ConsistencyLevel.ONE,
+                "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?",
+                keyspace
+            );
+            assertThat(results.size(), equalTo(1));
+        }, 30, TimeUnit.SECONDS);
+    }
+
+    private void ensureKeyspace(String keyspace) throws Exception {
+        process(
+            ConsistencyLevel.ONE,
+            "CREATE KEYSPACE IF NOT EXISTS "
+                + keyspace
+                + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', '"
+                + DatabaseDescriptor.getLocalDataCenter()
+                + "':'1' }"
+        );
+        waitForKeyspace(keyspace);
+    }
+
+    private void waitForType(String keyspace, String typeName) throws Exception {
+        assertBusy(() -> {
+            UntypedResultSet results = process(
+                ConsistencyLevel.ONE,
+                "SELECT type_name FROM system_schema.types WHERE keyspace_name = ? AND type_name = ?",
+                keyspace,
+                typeName
+            );
+            assertThat(results.size(), equalTo(1));
+        }, 30, TimeUnit.SECONDS);
+    }
+
     @Test
     public void testNamedUDT() throws Exception {
+        final String type = "testudt";
         XContentBuilder mapping1 = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -60,18 +100,18 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
                     .endObject()
                 .endObject();
 
-        // Use base createIndex (not raw prepareCreate().get()): embedded Elassandra can block forever waiting for
-        // active shards / ClusterStateObserver; the helper sets wait-for-active-shards to NONE and bounded health wait.
-        createIndex("twitter", Settings.EMPTY, "_doc", mapping1);
+        createIndex("twitter", Settings.EMPTY, type, mapping1);
         ensureGreen("twitter");
 
-        assertThat(client().prepareIndex("twitter", "_doc", "1")
+        assertThat(client().prepareIndex("twitter", type, "1")
                 .setSource("{ \"message\": \"hello\", \"user\": { \"user_id\": 500, \"user_email\":\"user@test.com\" } }", XContentType.JSON)
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
-        assertThat(client().prepareGet().setIndex("twitter").setType("_doc").setId("1")
+        assertThat(client().prepareGet().setIndex("twitter").setType(type).setId("1")
                 .get().isExists(), equalTo(true));
 
+        waitForKeyspace("twitter");
+        waitForType("twitter", "mytype");
         UntypedResultSet results = process(ConsistencyLevel.ONE,"SELECT field_names, field_types FROM system_schema.types WHERE keyspace_name = 'twitter' AND type_name = 'mytype'");
         assertThat(results.size(),equalTo(1));
     }
@@ -89,6 +129,7 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
 
         assertThat(client().admin().indices().preparePutTemplate("test_template")
                 .addMapping("_doc", mapping1)
+                .setSettings(Settings.builder().put("index.number_of_replicas", 0))
                 .setPatterns(java.util.Collections.singletonList("test_index-*"))
                 .get().isAcknowledged(), equalTo(true));
 
@@ -96,6 +137,7 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
                 .setSource("{ \"user\": { \"user_id\": \"500\", \"user_email\":\"user@test.com\" }, \"message\": \"hello\" }", XContentType.JSON)
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
         ensureGreen("test_index-2016.12.29");
+        client().admin().indices().prepareRefresh("test_index-2016.12.29").get();
 
         assertThat(client().prepareGet().setIndex("test_index-2016.12.29").setType("_doc").setId("1").get().isExists(), equalTo(true));
         assertThat(client().prepareMultiGet().add("test_index-2016.12.29","_doc","1").get().getResponses().length, equalTo(1));
@@ -108,25 +150,29 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
     // ES Auto-Discovery fails when Cassandra table has at least one UDT field (#77)
     @Test
     public void testDiscoverUDT() throws Exception {
-        createIndex("test");
-        ensureGreen("test");
+        final String index = ("test_" + randomAlphaOfLength(8)).toLowerCase(Locale.ROOT);
+        createIndex(index);
+        ensureGreen(index);
+        ensureKeyspace(index);
 
-        process(ConsistencyLevel.ONE,"create type test.fullname (firstname text, lastname text);");
-        process(ConsistencyLevel.ONE,"create table test.testudt (id uuid, name frozen<fullname>, primary key (id));");
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("testudt").setSource("{ \"testudt\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
+        process(ConsistencyLevel.ONE, "create type " + index + ".fullname (firstname text, lastname text);");
+        process(ConsistencyLevel.ONE, "create table " + index + ".testudt (id uuid, name frozen<fullname>, primary key (id));");
+        assertAcked(client().admin().indices().preparePutMapping(index).setType("testudt").setSource(discoverMapping("testudt")).get("120s"));
     }
 
     // test update nested types
     @Test
     public void testUpdateNestedUDT() throws Exception {
-        createIndex("test");
-        ensureGreen("test");
+        final String index = ("test_" + randomAlphaOfLength(8)).toLowerCase(Locale.ROOT);
+        createIndex(index);
+        ensureGreen(index);
+        ensureKeyspace(index);
 
-        process(ConsistencyLevel.ONE,"create type test.fullname (firstname text, lastname text);");
-        process(ConsistencyLevel.ONE,"create type test.info (town text, name list<frozen<fullname>>);");
-        process(ConsistencyLevel.ONE,"create table test.testudt (id text, name list<frozen<info>>, primary key (id));");
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("testudt").setSource("{ \"testudt\" : { \"discover\" : \".*\" }}", XContentType.JSON).get());
-        assertThat(client().prepareIndex("test","testudt","1").setSource("{\"name\":{\"fullname\": {\"firstname\":\"bob\", \"phone\":33 }}}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        process(ConsistencyLevel.ONE, "create type " + index + ".fullname (firstname text, lastname text);");
+        process(ConsistencyLevel.ONE, "create type " + index + ".info (town text, name list<frozen<fullname>>);");
+        process(ConsistencyLevel.ONE, "create table " + index + ".testudt (id text, name list<frozen<info>>, primary key (id));");
+        assertAcked(client().admin().indices().preparePutMapping(index).setType("testudt").setSource(discoverMapping("testudt")).get("120s"));
+        assertThat(client().prepareIndex(index,"testudt","1").setSource("{\"name\":{\"fullname\": {\"firstname\":\"bob\", \"phone\":33 }}}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
     }
 
     @Test
@@ -134,6 +180,7 @@ public class NamingTests extends OpenSearchSingleNodeTestCase {
         createIndex("test2");
         ensureGreen("test2");
         assertThat(client().prepareIndex("test2","_doc","1").setSource("{\"top\":\"secret\"}", XContentType.JSON).get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        client().admin().indices().prepareRefresh("test2").get();
         assertThat(client().prepareSearch("test2").setTypes("_doc").setQuery(QueryBuilders.existsQuery("top")).get().getHits().getTotalHits().value, equalTo(1L));
     }
 }

@@ -669,6 +669,27 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     public static final String SETTING_REPLICATION = "index.replication";
     public static final String SETTING_INDEX_ON_COMPACTION = "index.index_on_compaction";
 
+    public static final org.opensearch.common.settings.Setting<String> INDEX_SETTING_KEYSPACE_SETTING =
+        org.opensearch.common.settings.Setting.simpleString(
+            SETTING_KEYSPACE,
+            org.opensearch.common.settings.Setting.Property.Final,
+            org.opensearch.common.settings.Setting.Property.IndexScope
+        );
+
+    public static final org.opensearch.common.settings.Setting<String> INDEX_SETTING_TABLE_SETTING =
+        org.opensearch.common.settings.Setting.simpleString(
+            SETTING_TABLE,
+            org.opensearch.common.settings.Setting.Property.Final,
+            org.opensearch.common.settings.Setting.Property.IndexScope
+        );
+
+    public static final org.opensearch.common.settings.Setting<String> INDEX_SETTING_TABLE_OPTIONS_SETTING =
+        org.opensearch.common.settings.Setting.simpleString(
+            SETTING_TABLE_OPTIONS,
+            org.opensearch.common.settings.Setting.Property.Final,
+            org.opensearch.common.settings.Setting.Property.IndexScope
+        );
+
     /** Elassandra virtual index flags (fork parity; used by tests). */
     public static final org.opensearch.common.settings.Setting<Boolean> INDEX_SETTING_VIRTUAL_SETTING = org.opensearch.common.settings.Setting.boolSetting(
         SETTING_VIRTUAL,

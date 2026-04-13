@@ -33,6 +33,11 @@
 package org.opensearch.cluster.metadata;
 
 import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.schema.KeyspaceMetadata;
+import org.apache.cassandra.schema.MigrationManager;
+import org.apache.cassandra.transport.Event;
+import org.apache.cassandra.utils.Pair;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -102,6 +107,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -483,6 +489,29 @@ public class MetadataCreateIndexService {
             } catch (Exception e) {
                 logger.info("failed to build index metadata [{}]", request.index());
                 throw e;
+            }
+
+            final DocumentMapper documentMapper = indexService.mapperService().documentMapper();
+            if (documentMapper != null && MapperService.DEFAULT_MAPPING.equals(documentMapper.type()) == false) {
+                List<Mutation> mutations = new LinkedList<>();
+                List<Event.SchemaChange> events = new LinkedList<>();
+                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                    indexMetadata.keyspace(),
+                    indexMetadata.getNumberOfReplicas() + 1,
+                    Collections.emptyMap(),
+                    mutations,
+                    events
+                );
+                clusterService.getSchemaManager().updateTableSchema(
+                    ksm,
+                    documentMapper.type(),
+                    Collections.singletonMap(indexMetadata.getIndex(), Pair.create(indexMetadata, indexService.mapperService())),
+                    mutations,
+                    events
+                );
+                if (mutations.isEmpty() == false) {
+                    MigrationManager.mergeSchema(mutations, clusterService.getSchemaManager().getInhibitedSchemaListeners());
+                }
             }
 
             logger.log(
