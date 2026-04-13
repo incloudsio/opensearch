@@ -688,8 +688,47 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
         return null;
     }
 
+    private org.apache.cassandra.cql3.UntypedResultSet processWithQueryHandler(
+        org.apache.cassandra.db.ConsistencyLevel cl,
+        org.apache.cassandra.db.ConsistencyLevel serialCl,
+        org.apache.cassandra.service.ClientState clientState,
+        String query,
+        Object... values
+    ) throws org.apache.cassandra.exceptions.RequestExecutionException,
+             org.apache.cassandra.exceptions.RequestValidationException,
+             org.apache.cassandra.exceptions.InvalidRequestException {
+        org.apache.cassandra.cql3.QueryHandler handler = org.apache.cassandra.service.ClientState.getCQLQueryHandler();
+        org.apache.cassandra.service.QueryState queryState = new org.apache.cassandra.service.QueryState(clientState);
+        org.apache.cassandra.transport.messages.ResultMessage.Prepared prepared =
+            handler.prepare(query, clientState, java.util.Collections.emptyMap());
+
+        java.util.List<java.nio.ByteBuffer> boundValues = new java.util.ArrayList<>(values.length);
+        for (int i = 0; i < values.length; i++) {
+            Object value = values[i];
+            org.apache.cassandra.db.marshal.AbstractType type = prepared.metadata.names.get(i).type;
+            boundValues.add(
+                value instanceof java.nio.ByteBuffer || value == null
+                    ? (java.nio.ByteBuffer) value
+                    : type.decompose(value)
+            );
+        }
+
+        org.apache.cassandra.cql3.QueryOptions queryOptions =
+            serialCl == null
+                ? org.apache.cassandra.cql3.QueryOptions.forInternalCalls(cl, boundValues)
+                : org.apache.cassandra.cql3.QueryOptions.forInternalCalls(cl, serialCl, boundValues);
+        org.apache.cassandra.cql3.CQLStatement statement = handler.parse(query, queryState, queryOptions);
+        org.apache.cassandra.transport.messages.ResultMessage result =
+            handler.process(statement, queryState, queryOptions, java.util.Collections.emptyMap(), System.nanoTime());
+        return result instanceof org.apache.cassandra.transport.messages.ResultMessage.Rows
+            ? org.apache.cassandra.cql3.UntypedResultSet.create(
+                ((org.apache.cassandra.transport.messages.ResultMessage.Rows) result).result
+            )
+            : null;
+    }
+
     /**
-     * Elassandra: CQL process (fork parity). Delegates to Cassandra {@code QueryProcessor} for side-car compile.
+     * Elassandra: CQL process (fork parity).
      */
     public org.apache.cassandra.cql3.UntypedResultSet process(
         org.apache.cassandra.db.ConsistencyLevel cl,
@@ -698,7 +737,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     ) throws org.apache.cassandra.exceptions.RequestExecutionException,
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
-        return org.apache.cassandra.cql3.QueryProcessor.executeOnceInternal(query, values);
+        return processWithQueryHandler(cl, null, org.apache.cassandra.service.ClientState.forInternalCalls(), query, values);
     }
 
     /** Elassandra: CQL with explicit {@link org.apache.cassandra.service.ClientState} (fork parity). */
@@ -709,7 +748,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     ) throws org.apache.cassandra.exceptions.RequestExecutionException,
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
-        return process(cl, query);
+        return processWithQueryHandler(cl, null, clientState, query);
     }
 
     /** Elassandra: CQL with client state and bound values (fork parity). */
@@ -721,7 +760,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     ) throws org.apache.cassandra.exceptions.RequestExecutionException,
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
-        return process(cl, query, values);
+        return processWithQueryHandler(cl, null, clientState, query, values);
     }
 
     /** Elassandra: access Cassandra discovery from tests (fork parity). */
@@ -740,7 +779,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     ) throws org.apache.cassandra.exceptions.RequestExecutionException,
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
-        process(cl, query, values);
+        processWithQueryHandler(cl, serialCl, org.apache.cassandra.service.ClientState.forInternalCalls(), query, values);
         return true;
     }
 

@@ -84,7 +84,8 @@ public class Loggers {
     }
 
     public static Logger getLogger(Class<?> clazz, String... prefixes) {
-        return new PrefixLogger(LogManager.getLogger(clazz), formatPrefix(prefixes));
+        final String prefix = formatPrefix(prefixes);
+        return prefix == null ? LogManager.getLogger(clazz) : new PrefixLogger(LogManager.getLogger(clazz), prefix);
     }
 
     public static Logger getLogger(Logger parentLogger, String s) {

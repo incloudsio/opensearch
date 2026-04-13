@@ -371,6 +371,11 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
             System.out.println("cassandra.storagedir="+System.getProperty("cassandra.storagedir"));
             System.out.println("logback.configurationFile="+System.getProperty("logback.configurationFile"));
 
+            if (System.getProperty("cassandra.custom_query_handler_class") == null) {
+                System.setProperty("cassandra.custom_query_handler_class", "org.elassandra.index.ElasticQueryHandler");
+            }
+            System.out.println("cassandra.custom_query_handler_class="+System.getProperty("cassandra.custom_query_handler_class"));
+
             if (Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "true"))) {
                 DatabaseDescriptor.daemonInitialization(() -> {
                     String homeProp = System.getProperty("cassandra.home");
@@ -399,7 +404,6 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
                 DatabaseDescriptor.daemonInitialization();
             }
             DatabaseDescriptor.createAllDirectories();
-
             CountDownLatch startLatch = new CountDownLatch(1);
             ElassandraDaemon.instance = new ElassandraDaemon(InternalSettingsPreparer.prepareEnvironment(Settings.builder()
                 .put(Environment.PATH_HOME_SETTING.getKey(), System.getProperty("cassandra.home"))

@@ -59,6 +59,9 @@ public class ExtendedElasticSecondaryIndex implements Index {
     public ExtendedElasticSecondaryIndex(ColumnFamilyStore baseCfs, org.apache.cassandra.schema.IndexMetadata indexDef) {
         this.indexDef = indexDef;
         this.elasticSecondaryIndex = newIndex(baseCfs, indexDef);
+        if (this.elasticSecondaryIndex instanceof ElasticSecondaryIndex) {
+            ((ElasticSecondaryIndex) this.elasticSecondaryIndex).setRegisteredIndex(this);
+        }
     }
 
     private Index newIndex(ColumnFamilyStore baseCfs, org.apache.cassandra.schema.IndexMetadata indexDef) {
@@ -101,6 +104,9 @@ public class ExtendedElasticSecondaryIndex implements Index {
 
     @Override
     public void register(IndexRegistry registry) {
+        if (elasticSecondaryIndex instanceof ElasticSecondaryIndex) {
+            ((ElasticSecondaryIndex) elasticSecondaryIndex).setRegisteredIndex(this);
+        }
         registry.registerIndex(this);
     }
 

@@ -176,6 +176,10 @@ public class FieldsVisitor extends StoredFieldVisitor {
         return new Uid(type, id);
     }
 
+    public String id() {
+        return id;
+    }
+
     public String routing() {
         if (fieldsValues == null) {
             return null;

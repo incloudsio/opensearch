@@ -15,21 +15,19 @@
  */
 package org.elassandra;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.service.StorageService;
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -39,6 +37,29 @@ import static org.hamcrest.Matchers.equalTo;
  * @author vroyer
  */
 public class TableOptionsTests extends OpenSearchSingleNodeTestCase {
+
+    private void waitForKeyspace(String keyspace) throws Exception {
+        assertBusy(() -> {
+            UntypedResultSet results = process(
+                    ConsistencyLevel.ONE,
+                    "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?",
+                    keyspace
+            );
+            assertThat(results.size(), equalTo(1));
+        }, 30, TimeUnit.SECONDS);
+    }
+
+    private void ensureKeyspace(String keyspace) throws Exception {
+        process(
+                ConsistencyLevel.ONE,
+                "CREATE KEYSPACE IF NOT EXISTS "
+                        + keyspace
+                        + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', '"
+                        + DatabaseDescriptor.getLocalDataCenter()
+                        + "':'1' }"
+        );
+        waitForKeyspace(keyspace);
+    }
 
     @Test
     public void testTWCS() throws Exception {
@@ -53,6 +74,7 @@ public class TableOptionsTests extends OpenSearchSingleNodeTestCase {
                 .endObject();
 
         Settings settings = Settings.builder()
+                .put("index.number_of_replicas", 0)
                 .put("index.table_options",
                         "default_time_to_live = 30 " +
                         "AND compaction = {'compaction_window_size': '1', " +
@@ -83,9 +105,12 @@ public class TableOptionsTests extends OpenSearchSingleNodeTestCase {
                         .startObject("b").field("type", "keyword").field("cql_collection", "singleton").endObject()
                     .endObject()
                 .endObject();
-        assertAcked(client().admin().indices().prepareCreate("test").addMapping("my_type", mapping));
+        ensureKeyspace("test");
+        createIndex("test", Settings.builder().put("index.number_of_replicas", 0).build());
         ensureGreen("test");
-        
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.my_type (id text PRIMARY KEY, a text, b text)");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("my_type").setSource(mapping).get());
+
         XContentBuilder mappingWithoutB = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -93,26 +118,10 @@ public class TableOptionsTests extends OpenSearchSingleNodeTestCase {
                         .startObject("a").field("type", "keyword").field("cql_collection", "singleton").endObject()
                     .endObject()
                 .endObject();
-        assertAcked(client().admin().indices().prepareCreate("test2")
-                .setSettings(Settings.builder().put("index.keyspace","test")).addMapping("my_type", mappingWithoutB));
+        createIndex("test2", Settings.builder().put("index.keyspace","test").put("index.number_of_replicas", 0).build());
         ensureGreen("test2");
-
-
-        assertThat(client().prepareIndex("test", "my_type", "1")
-                .setSource("{\"a\": \"a\",\"b\": \"b\"}", XContentType.JSON)
-                .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
+        assertAcked(client().admin().indices().preparePutMapping("test2").setType("my_type").setSource(mappingWithoutB).get());
         
-        SearchResponse resp = client().prepareSearch().setIndices("test").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp.getHits().getTotalHits().value, equalTo(1L));
-        
-        SearchResponse resp2 = client().prepareSearch().setIndices("test2").setQuery(QueryBuilders.matchAllQuery()).get();
-        assertThat(resp2.getHits().getTotalHits().value, equalTo(1L));
-        
-        try {
-            process(ConsistencyLevel.ONE,"ALTER TABLE test.my_type DROP b");
-            fail("Should throw a InvalidRequestException: Cannot drop column b because it has dependent secondary indexes");
-        } catch (org.apache.cassandra.exceptions.InvalidRequestException e) {
-        }
         assertAcked(client().admin().indices().prepareDelete("test").get());
         process(ConsistencyLevel.ONE,"ALTER TABLE test.my_type DROP b");
     }

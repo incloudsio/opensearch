@@ -337,13 +337,14 @@ public class FetchPhase {
             SearchHit hit;
             loadStoredFields(context.mapperService(), fieldReader, fieldsVisitor, subDocId);
             Uid uid = fieldsVisitor.uid();
+            String hitId = uid == null ? fieldsVisitor.id() : uid.id();
             if (fieldsVisitor.fields().isEmpty() == false) {
                 Map<String, DocumentField> docFields = new HashMap<>();
                 Map<String, DocumentField> metaFields = new HashMap<>();
                 fillDocAndMetaFields(context, fieldsVisitor, storedToRequestedFields, docFields, metaFields);
-                hit = new SearchHit(docId, uid.id(), typeText, docFields, metaFields);
+                hit = new SearchHit(docId, hitId, typeText, docFields, metaFields);
             } else {
-                hit = new SearchHit(docId, uid.id(), typeText, emptyMap(), emptyMap());
+                hit = new SearchHit(docId, hitId, typeText, emptyMap(), emptyMap());
             }
 
             HitContext hitContext = new HitContext(hit, subReaderContext, subDocId, lookup.source());

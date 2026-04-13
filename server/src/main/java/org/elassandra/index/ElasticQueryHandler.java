@@ -18,6 +18,7 @@ package org.elassandra.index;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.ColumnSpecification;
+import org.apache.cassandra.cql3.QueryHandler;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.ResultSet;
@@ -52,7 +53,11 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.logging.log4j.Logger;
+import org.elassandra.cluster.DocPrimaryKey;
+import org.elassandra.cluster.QueryManager;
+import org.elassandra.cluster.SchemaManager;
 import org.elassandra.cluster.routing.AbstractSearchStrategy;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.action.search.SearchRequestBuilder;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchScrollRequestBuilder;
@@ -98,16 +103,20 @@ import org.opensearch.search.aggregations.metrics.SumAggregationBuilder;
 import org.opensearch.search.aggregations.pipeline.InternalSimpleValue;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.common.xcontent.NamedXContentRegistry;
+import org.opensearch.index.IndexService;
+import org.opensearch.index.shard.IndexShard;
 import org.opensearch.search.fetch.CqlFetchPhase;
 import org.joda.time.DateTime;
 
 import java.io.IOException;
+import java.time.ZonedDateTime;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -156,16 +165,19 @@ public class ElasticQueryHandler extends QueryProcessor {
                 if (elasticQuery != null) {
                     ColumnFamilyStore cfs = Keyspace.open(select.keyspace()).getColumnFamilyStore(select.columnFamily());
                     Index index = cfs.indexManager.getIndexByName(ClusterService.buildIndexName(cfs.name));
-                    if (index instanceof ExtendedElasticSecondaryIndex) {
-                        Map<String, String> esOptions = null;
-                        if (elasticOptions != null) {
-                            esOptions = new HashMap<>();
-                            for (NameValuePair pair : URLEncodedUtils.parse(elasticOptions, Charset.forName("UTF-8")))
-                                esOptions.put(pair.getName(), pair.getValue());
-                        }
-                        ExtendedElasticSecondaryIndex elasticIndex = (ExtendedElasticSecondaryIndex) index;
-                        return executeElasticQuery(select, queryState, options, queryStartNanoTime, (ElasticSecondaryIndex) elasticIndex.elasticSecondaryIndex, elasticQuery, esOptions);
+                    String typeName = select.columnFamily();
+                    Map<String, String> esOptions = null;
+                    if (elasticOptions != null) {
+                        esOptions = new HashMap<>();
+                        for (NameValuePair pair : URLEncodedUtils.parse(elasticOptions, Charset.forName("UTF-8")))
+                            esOptions.put(pair.getName(), pair.getValue());
                     }
+                    if (index instanceof ExtendedElasticSecondaryIndex) {
+                        typeName = ((ElasticSecondaryIndex) ((ExtendedElasticSecondaryIndex) index).elasticSecondaryIndex).typeName;
+                    } else if (index instanceof ElasticSecondaryIndex) {
+                        typeName = ((ElasticSecondaryIndex) index).typeName;
+                    }
+                    return executeElasticQuery(select, queryState, options, queryStartNanoTime, typeName, elasticQuery, esOptions);
                 }
             }
         }
@@ -176,9 +188,10 @@ public class ElasticQueryHandler extends QueryProcessor {
     void handle(QueryState queryState, Client client) {
     }
 
-    ResultMessage executeElasticQuery(SelectStatement select, QueryState queryState, QueryOptions options, long queryStartNanoTime, ElasticSecondaryIndex index, String query, Map<String, String> esOptions) {
+    ResultMessage executeElasticQuery(SelectStatement select, QueryState queryState, QueryOptions options, long queryStartNanoTime, String typeName, String query, Map<String, String> esOptions) {
 
         Client client = ElassandraDaemon.instance.node().client();
+        final boolean toJson = select.parameters.isJson || (esOptions != null && esOptions.containsKey("json"));
         ThreadContext context = client.threadPool().getThreadContext();
         Map<String, Object> extraParams = null;
         try (ThreadContext.StoredContext stashedContext = context.stashContext()) {
@@ -215,10 +228,8 @@ public class ElasticQueryHandler extends QueryProcessor {
                     throw new SyntaxException(e.getMessage());
                 }
                 String indices = (esOptions != null && esOptions.containsKey("indices")) ? esOptions.get("indices") : select.keyspace();
-                boolean toJson = select.parameters.isJson || (esOptions != null && esOptions.containsKey("json"));
                 SearchRequestBuilder srb = client.prepareSearch(indices)
-                    .setSource(ssb)
-                    .setTypes(index.typeName);
+                    .setSource(ssb);
 
                 AbstractBounds bounds = select.getRestrictions().getPartitionKeyBounds(options);
                 if (bounds != null) {
@@ -245,7 +256,7 @@ public class ElasticQueryHandler extends QueryProcessor {
                 if (hasAgregation) {
                     if (logger.isDebugEnabled())
                         logger.debug("type={} es_query={} es_options={} toJson={} size=0 with aggregation",
-                            index.typeName, ssb.toString(), indices, toJson);
+                            typeName, ssb.toString(), indices, toJson);
                     srb.setSize(0);
                     aggMetadataBuilder = new AggregationMetaDataBuilder(select.keyspace(), "aggs", toJson);
                     aggMetadataBuilder.build("", ssb.aggregations(), select.getSelection());
@@ -260,13 +271,13 @@ public class ElasticQueryHandler extends QueryProcessor {
                     if (options.getPageSize() > 0 && (limit > options.getPageSize())) {
                         if (logger.isDebugEnabled())
                             logger.debug("type={} es_query={} es_options={} toJson={} size={} with scrolling",
-                                index.typeName, ssb.toString(), indices, toJson, options.getPageSize());
+                                typeName, ssb.toString(), indices, toJson, options.getPageSize());
                         srb.setScroll(new Scroll(new TimeValue(60, TimeUnit.SECONDS)));
                         srb.setSize(options.getPageSize());
                     } else {
                         if (logger.isDebugEnabled())
                             logger.debug("type={} es_query={} es_options={} toJson={} size={} with no scrolling",
-                                index.typeName, ssb.toString(), indices, toJson, limit);
+                                typeName, ssb.toString(), indices, toJson, limit);
                         srb.setSize(Math.min(limit, 10000)); // default index.max_result_window is 10000
                     }
                 }
@@ -309,10 +320,17 @@ public class ElasticQueryHandler extends QueryProcessor {
                 }
             } else {
                 // add row results
+                Map<Boolean, QueryHandler.Prepared> projectionStatements = null;
                 if (logger.isDebugEnabled())
                     logger.debug("scrollId={} hits={}", scrollId, resp.getHits().getHits().length);
                 for (SearchHit hit : resp.getHits().getHits()) {
                     List<ByteBuffer> rowVals = searchHitByteBufferValues(hit);
+                    if (rowVals == null) {
+                        if (projectionStatements == null) {
+                            projectionStatements = new HashMap<>();
+                        }
+                        rowVals = fetchHitByteBufferValues(select, typeName, hit, toJson, projectionStatements);
+                    }
                     if (rowVals != null) {
                         rows.add(rowVals);
                     }
@@ -539,7 +557,7 @@ public class ElasticQueryHandler extends QueryProcessor {
                         boolean fistBucket = true;
                         for (InternalDateHistogram.Bucket histoBucket : ((InternalDateHistogram) agg).getBuckets()) {
                             row = getRowForBucket(amdb, level, keyIdx, fistBucket, rows);
-                            setElement(row, keyIdx, TimestampType.instance.getSerializer().serialize(((DateTime) histoBucket.getKey()).toDate()));
+                            setElement(row, keyIdx, TimestampType.instance.getSerializer().serialize(dateHistogramKeyToDate(histoBucket.getKey())));
                             setElement(row, cntIdx, ByteBufferUtil.bytes(histoBucket.getDocCount()));
                             if (histoBucket.getAggregations().iterator().hasNext())
                                 flattenAggregation(amdb, level + 1, baseName, histoBucket.getAggregations(), rows);
@@ -603,9 +621,10 @@ public class ElasticQueryHandler extends QueryProcessor {
     private static NamedXContentRegistry namedXContentRegistryForQueryParsing() {
         try {
             if (ElassandraDaemon.instance != null && ElassandraDaemon.instance.node() != null) {
-                Object node = ElassandraDaemon.instance.node();
-                Method m = node.getClass().getMethod("getNamedXContentRegistry");
-                return (NamedXContentRegistry) m.invoke(node);
+                NamedXContentRegistry registry = ElassandraDaemon.instance.node().injector().getInstance(NamedXContentRegistry.class);
+                if (registry != null) {
+                    return registry;
+                }
             }
         } catch (Throwable ignored) {
             // side-car compile stub / Node API without registry
@@ -638,5 +657,88 @@ public class ElasticQueryHandler extends QueryProcessor {
         } catch (ReflectiveOperationException e) {
             return null;
         }
+    }
+
+    private static List<ByteBuffer> fetchHitByteBufferValues(
+        SelectStatement select,
+        String typeName,
+        SearchHit hit,
+        boolean toJson,
+        Map<Boolean, QueryHandler.Prepared> projectionStatements
+    ) {
+        try {
+            ClusterService clusterService = ElassandraDaemon.instance.node().injector().getInstance(ClusterService.class);
+            QueryManager queryManager = new QueryManager(ElassandraDaemon.instance.node().settings(), clusterService);
+            IndexMetadata indexMetaData = clusterService.state().metadata().index(select.keyspace());
+            if (indexMetaData == null) {
+                return null;
+            }
+            IndexService indexService = clusterService.getIndicesService().indexService(indexMetaData.getIndex());
+            if (indexService == null) {
+                return null;
+            }
+            IndexShard indexShard = indexService.getShardOrNull(0);
+            if (indexShard == null) {
+                return null;
+            }
+
+            DocPrimaryKey docPk = queryManager.parseElasticId(indexService.mapperService().keyspace(), typeName, hit.getId());
+            QueryHandler.Prepared prepared = projectionStatements.get(docPk.isStaticDocument);
+            if (prepared == null) {
+                prepared = QueryProcessor.prepareInternal(
+                    buildProjectionFetchQuery(indexShard, typeName, select.getSelection().toCQLString(), docPk.isStaticDocument, toJson)
+                );
+                projectionStatements.put(docPk.isStaticDocument, prepared);
+            }
+
+            ResultMessage result = prepared.statement.executeLocally(
+                new QueryState(ClientState.forInternalCalls()),
+                QueryOptions.forInternalCalls(org.apache.cassandra.db.ConsistencyLevel.ONE, docPk.serialize(prepared))
+            );
+            if (result instanceof ResultMessage.Rows) {
+                return firstResultRowBuffers((ResultMessage.Rows) result);
+            }
+        } catch (Exception e) {
+            logger.warn("Fallback CQL projection fetch failed for hit id={} type={}", hit.getId(), typeName, e);
+        }
+        return null;
+    }
+
+    private static String buildProjectionFetchQuery(
+        IndexShard indexShard,
+        String typeName,
+        String projection,
+        boolean forStaticDocument,
+        boolean isJson
+    ) throws IOException {
+        org.opensearch.index.mapper.DocumentMapper docMapper = indexShard.mapperService().documentMapper(typeName);
+        String cfName = SchemaManager.typeToCfName(indexShard.mapperService().keyspace(), typeName);
+        org.opensearch.index.mapper.DocumentMapper.CqlFragments cqlFragment = docMapper.getCqlFragments();
+        return new StringBuilder()
+            .append("SELECT ")
+            .append(isJson ? "JSON " : "")
+            .append(projection)
+            .append(" FROM \"").append(indexShard.mapperService().keyspace()).append("\".\"").append(cfName).append("\"")
+            .append(" WHERE ")
+            .append(forStaticDocument ? cqlFragment.ptWhere : cqlFragment.pkWhere)
+            .append(" LIMIT 1")
+            .toString();
+    }
+
+    private static List<ByteBuffer> firstResultRowBuffers(ResultMessage.Rows result) {
+        return result.result == null || result.result.isEmpty() ? null : result.result.firstRow();
+    }
+
+    private static Date dateHistogramKeyToDate(Object key) {
+        if (key instanceof DateTime) {
+            return ((DateTime) key).toDate();
+        }
+        if (key instanceof ZonedDateTime) {
+            return Date.from(((ZonedDateTime) key).toInstant());
+        }
+        if (key instanceof Date) {
+            return (Date) key;
+        }
+        throw new IllegalArgumentException("Unsupported date histogram key type: " + (key == null ? "null" : key.getClass().getName()));
     }
 }

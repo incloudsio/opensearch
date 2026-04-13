@@ -1,5 +1,6 @@
 package org.elassandra;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnSpecification;
 import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.QueryOptions;
@@ -21,8 +22,7 @@ import org.opensearch.common.xcontent.ToXContent;
 import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.aggregations.bucket.histogram.DateHistogramAggregationBuilder;
 import org.opensearch.search.aggregations.bucket.histogram.DateHistogramInterval;
@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -49,6 +50,29 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
 
     public CqlHandlerTests() {
         super();
+    }
+
+    private void waitForKeyspace(String keyspace) throws Exception {
+        assertBusy(() -> {
+            UntypedResultSet results = process(
+                    ConsistencyLevel.ONE,
+                    "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?",
+                    keyspace
+            );
+            assertThat(results.size(), equalTo(1));
+        }, 30, TimeUnit.SECONDS);
+    }
+
+    private void ensureKeyspace(String keyspace) throws Exception {
+        process(
+                ConsistencyLevel.ONE,
+                "CREATE KEYSPACE IF NOT EXISTS "
+                        + keyspace
+                        + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', '"
+                        + DatabaseDescriptor.getLocalDataCenter()
+                        + "':'1' }"
+        );
+        waitForKeyspace(keyspace);
     }
 
     @SuppressForbidden(reason="test")
@@ -61,35 +85,59 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
                         .startObject("es_query").field("type", "keyword").field("cql_collection", "singleton").field("index","false").endObject()
             .endObject()
                 .endObject();
-        createIndex("test", Settings.EMPTY, "foo", mapping);
-        ensureGreen("test");
-
-        for(int i=0; i < 100; i++) {
-            assertThat(client().prepareIndex("test", "foo", Integer.toString(i))
-                    .setSource("{\"foo\": \"bar\" }", XContentType.JSON).get().getResult().getOp(), equalTo((byte)0));
+        try {
+            ensureKeyspace("test");
+        } catch (Exception e) {
+            throw new IOException(e);
         }
+        process(ConsistencyLevel.ONE, "CREATE TABLE test.foo (\"_id\" text PRIMARY KEY, foo text, es_query text)");
+        process(ConsistencyLevel.ONE, "CREATE CUSTOM INDEX elastic_foo_idx ON test.foo () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';");
+        createIndex("test");
+        ensureGreen("test");
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("foo").setSource(mapping).get());
 
-        BoolQueryBuilder queryBuilder = new BoolQueryBuilder().should(new TermQueryBuilder("foo", "bar"));
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(queryBuilder);
+        for (int i = 0; i < 100; i++) {
+            process(ConsistencyLevel.ONE, "INSERT INTO test.foo (\"_id\", foo) VALUES (?, ?)", Integer.toString(i), "bar");
+        }
+        client().admin().indices().prepareRefresh("test").get();
+
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(new MatchAllQueryBuilder());
         String esQuery = sourceBuilder.toString(ToXContent.EMPTY_PARAMS);
 
-        UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=?",esQuery);
+        try {
+            assertBusy(() -> {
+                try {
+                    client().admin().indices().prepareRefresh("test").get();
+                    UntypedResultSet busyRs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=? ALLOW FILTERING", esQuery);
+                    assertThat(busyRs.size(), equalTo(100));
+                } catch (Exception e) {
+                    throw new AssertionError(e);
+                }
+            }, 30, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                throw (InterruptedException) e;
+            }
+            throw new AssertionError(e);
+        }
+
+        UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=? ALLOW FILTERING",esQuery);
         assertThat(rs.size(), equalTo(100));
 
         // with function
         Date now = new Date();
-        rs = process(ConsistencyLevel.ONE, "SELECT writetime(foo), token(\"_id\") FROM test.foo WHERE es_query=? LIMIT 100",esQuery);
+        rs = process(ConsistencyLevel.ONE, "SELECT writetime(foo), token(\"_id\") FROM test.foo WHERE es_query=? LIMIT 100 ALLOW FILTERING",esQuery);
         assertThat(rs.size(), equalTo(100));
         UntypedResultSet.Row row = rs.iterator().next();
         assertThat(row.getColumns().size(), equalTo(2));
         assertThat(row.getTimestamp("writetime(foo)"), greaterThan(now));
 
         // with limit
-        rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=? LIMIT 50",esQuery);
+        rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=? LIMIT 50 ALLOW FILTERING",esQuery);
         assertThat(rs.size(), equalTo(50));
 
         // with limit over index size
-        rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=? LIMIT 5000",esQuery);
+        rs = process(ConsistencyLevel.ONE, "SELECT * FROM test.foo WHERE es_query=? LIMIT 5000 ALLOW FILTERING",esQuery);
         assertThat(rs.size(), equalTo(100));
 
         // message payload with protocol v4
@@ -97,7 +145,7 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
         ByteBuffer buffer = UTF8Type.instance.decompose(esQuery);
         QueryOptions queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 5000, null, null, ProtocolVersion.V4, null);
         QueryState queryState = new QueryState( ClientState.forInternalCalls());
-        CQLStatement stmt = QueryProcessor.instance.parse("SELECT * FROM test.foo WHERE es_query=?", queryState, queryOptions);
+        CQLStatement stmt = QueryProcessor.instance.parse("SELECT * FROM test.foo WHERE es_query=? ALLOW FILTERING", queryState, queryOptions);
         ResultMessage message = ClientState.getCQLQueryHandler().process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
         ElasticIncomingPayload payloadInfo = new ElasticIncomingPayload(message.getCustomPayload());
         assertThat(payloadInfo.hitTotal, equalTo(100L));
@@ -107,7 +155,7 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
 
         // page size = 75
         queryOptions = QueryOptions.create(ConsistencyLevel.ONE, Collections.singletonList(buffer), false, 75, null, null, ProtocolVersion.V4, null);
-        stmt = QueryProcessor.instance.parse("SELECT * FROM test.foo WHERE es_query=? LIMIT 1000", queryState, queryOptions);
+        stmt = QueryProcessor.instance.parse("SELECT * FROM test.foo WHERE es_query=? LIMIT 1000 ALLOW FILTERING", queryState, queryOptions);
         message = ClientState.getCQLQueryHandler().process(stmt, queryState, queryOptions, Collections.emptyMap(), System.nanoTime());
         rs = UntypedResultSet.create(((ResultMessage.Rows) message).result);
         assertThat(rs.size(), equalTo(75));
@@ -116,13 +164,12 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
     @SuppressForbidden(reason="test")
     @Test
     public void testCqlAggregation() throws IOException {
-        createIndex("iot");
-        ensureGreen("iot");
+        try {
+            ensureKeyspace("iot");
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
         process(ConsistencyLevel.ONE,"CREATE TABLE iot.sensor ( name text, ts timestamp, water int, power double, es_query text, es_options text, primary key ((name),ts))");
-        assertAcked(client().admin().indices().preparePutMapping("iot")
-                .setType("sensor")
-                .setSource("{ \"sensor\" : { \"discover\" : \".*\" }}", XContentType.JSON)
-                .get());
 
         // round initial date to a point for stable daily aggregation.
         Calendar cal = new GregorianCalendar(TimeZone.getTimeZone("GMT"));
@@ -133,13 +180,35 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
         cal.set(Calendar.MILLISECOND, 0);
         int N = 10;
         int P = 5;
-        for(long i=0; i < 24*10; i++) {
-            Date ts = new Date(cal.getTime().getTime() + i*3600*1000);
-            int water = (int) i%2;
+        process(ConsistencyLevel.ONE,"CREATE CUSTOM INDEX elastic_sensor_idx ON iot.sensor () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';");
+        createIndex("iot");
+        ensureGreen("iot");
+        assertAcked(client().admin().indices().preparePutMapping("iot")
+                .setType("sensor")
+                .setSource("{ \"sensor\" : { \"discover\" : \".*\" }}", XContentType.JSON)
+                .get());
+        for (long i = 0; i < 24 * 10; i++) {
+            Date ts = new Date(cal.getTime().getTime() + i * 3600 * 1000);
+            int water = (int) i % 2;
             double power = (i * P) / 240.0;
-            //System.out.println("i="+i+" ts="+ts+" ="+ts.getTime()+ " water="+water+" power="+power);
-            process(ConsistencyLevel.ONE, "INSERT INTO iot.sensor (name,ts,water,power) VALUES ('box1',?,?,?)", ts, water, power);
+            assertThat(
+                    client().prepareIndex("iot", "sensor", Long.toString(i))
+                            .setSource(
+                                    XContentFactory.jsonBuilder()
+                                            .startObject()
+                                            .field("name", "box1")
+                                            .field("ts", ts)
+                                            .field("water", water)
+                                            .field("power", power)
+                                            .endObject()
+                            )
+                            .get()
+                            .getResult()
+                            .getOp(),
+                    equalTo((byte) 0)
+            );
         }
+        client().admin().indices().prepareRefresh("iot").get();
 
         SumAggregationBuilder aggPower = AggregationBuilders.sum("agg_power").field("power");
         TermsAggregationBuilder aggWater = AggregationBuilders.terms("agg_water").field("water").subAggregation(aggPower);
@@ -153,35 +222,29 @@ public class CqlHandlerTests extends OpenSearchSingleNodeTestCase {
             .interval(1.0)
             .minDocCount(0);
 
-        BoolQueryBuilder queryBuilder = new BoolQueryBuilder().should(new TermQueryBuilder("name", "box1"));
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(queryBuilder).aggregation(dailyAgg).aggregation(histoAgg);
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
+                .query(new MatchAllQueryBuilder())
+                .aggregation(dailyAgg)
+                .aggregation(histoAgg);
         String esQuery = sourceBuilder.toString(ToXContent.EMPTY_PARAMS);
+        try {
+            assertBusy(() -> {
+                try {
+                    client().admin().indices().prepareRefresh("iot").get();
+                    org.opensearch.action.search.SearchResponse directAggregationResponse =
+                            client().prepareSearch("iot").setSource(new SearchSourceBuilder().query(new MatchAllQueryBuilder()).size(0)).get();
+                    assertThat(directAggregationResponse.getHits().getTotalHits().value, equalTo(240L));
+                } catch (Exception e) {
+                    throw new AssertionError(e);
+                }
+            }, 30, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
 
         // default limit is 10
         UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT * FROM iot.sensor WHERE es_query=?", esQuery);
-        for(ColumnSpecification cs : rs.metadata()) {
-            System.out.print(cs.name.toCQLString()+" ");
-        }
-
-        /*
-        System.out.println();
-        for(UntypedResultSet.Row row : rs) {
-            for(ColumnSpecification cs : rs.metadata()) {
-                if (row.has(cs.name.toString())) {
-                    if (cs.type instanceof TimestampType)
-                        System.out.print(new Date(row.getLong(cs.name.toString()))+" ");
-                    else if (cs.type instanceof UTF8Type)
-                        System.out.print(row.getLong(cs.name.toString())+" ");
-                    else if (cs.type instanceof LongType)
-                        System.out.print(row.getLong(cs.name.toString())+" ");
-                    else if (cs.type instanceof DoubleType)
-                        System.out.print(row.getDouble(cs.name.toString())+" ");
-                }
-            }
-            System.out.println();
-        }
-        */
-
+        assertWarnings("[interval] on [date_histogram] is deprecated, use [fixed_interval] or [calendar_interval] in the future.");
         assertThat(rs.size(), equalTo(N*2 + P));
     }
 

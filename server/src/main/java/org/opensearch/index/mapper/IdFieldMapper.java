@@ -67,6 +67,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -284,6 +285,25 @@ public class IdFieldMapper extends MetadataFieldMapper {
     public void preParse(ParseContext context) {
         BytesRef id = Uid.encodeId(context.sourceToParse().id());
         context.doc().add(new Field(NAME, id, Defaults.FIELD_TYPE));
+    }
+
+    @Override
+    public void preCreate(Object indexingContext) {
+        if (indexingContext instanceof ParseContext) {
+            ParseContext context = (ParseContext) indexingContext;
+            if (context.id() != null) {
+                context.doc().add(new Field(NAME, Uid.encodeId(context.id()), Defaults.FIELD_TYPE));
+            }
+        }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
+        if (context.doc().getField(NAME) != null || value == null) {
+            return;
+        }
+        final String id = value instanceof Uid ? ((Uid) value).id() : value.toString();
+        context.doc().add(new Field(NAME, Uid.encodeId(id), Defaults.FIELD_TYPE));
     }
 
     @Override
