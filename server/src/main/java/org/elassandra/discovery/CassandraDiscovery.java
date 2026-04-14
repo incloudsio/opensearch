@@ -588,18 +588,27 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             clusterStateBuilder.nodes(discoverNodes);
 
             if (currentState.nodes().getSize() != discoverNodes.getSize() || updateRouting) {
-
-                // update numberOfShards/numberOfReplicas for all indices.
-                Metadata.Builder metaDataBuilder = Metadata.builder(currentState.metadata());
-                for(Iterator<IndexMetadata> it = currentState.metadata().iterator(); it.hasNext(); ) {
+                // Routing-only updates (searchEnabled/X1 changes) should not bump metadata.version when shard/replica
+                // counts are unchanged; that drift breaks the later schema CAS against Cassandra metadata_log.
+                Metadata.Builder metaDataBuilder = null;
+                for (Iterator<IndexMetadata> it = currentState.metadata().iterator(); it.hasNext();) {
                     IndexMetadata indexMetaData = it.next();
+                    final int targetShards = discoverNodes.getSize();
+                    final int targetReplicas = Math.max(0, ClusterService.replicationFactor(keyspaceForIndex(indexMetaData)) - 1);
+                    if (indexMetaData.getNumberOfShards() == targetShards && indexMetaData.getNumberOfReplicas() == targetReplicas) {
+                        continue;
+                    }
+                    if (metaDataBuilder == null) {
+                        metaDataBuilder = Metadata.builder(currentState.metadata());
+                    }
                     IndexMetadata.Builder indexMetaDataBuilder = IndexMetadata.builder(indexMetaData);
-                    indexMetaDataBuilder.numberOfShards(discoverNodes.getSize());
-                    int rf = ClusterService.replicationFactor(keyspaceForIndex(indexMetaData));
-                    indexMetaDataBuilder.numberOfReplicas( Math.max(0, rf - 1) );
+                    indexMetaDataBuilder.numberOfShards(targetShards);
+                    indexMetaDataBuilder.numberOfReplicas(targetReplicas);
                     metaDataBuilder.put(indexMetaDataBuilder.build(), false);
                 }
-                clusterStateBuilder.metadata(metaDataBuilder.build());
+                if (metaDataBuilder != null) {
+                    clusterStateBuilder.metadata(metaDataBuilder.build());
+                }
                 ClusterState workingClusterState = clusterStateBuilder.build();
                 RoutingTable routingTable = RoutingTable.build(clusterService, workingClusterState);
                 ClusterState resultingState = ClusterState.builder(workingClusterState).routingTable(routingTable).build();

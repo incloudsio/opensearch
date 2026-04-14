@@ -82,20 +82,22 @@ public class CassandraDiscoveryTests extends OpenSearchSingleNodeTestCase {
         ensureGreen("test");
 
         MockCassandraDiscovery discovery = this.getMockCassandraDiscovery();
+        final UUID concurrentOwner = UUID.randomUUID();
         discovery.setPublishFunc(e -> {
             if (version == -1) {
-                // increase CQL version number to simulate PAXOS update while CQL schema not yet received.
-                UntypedResultSet rs = process(ConsistencyLevel.ONE, "SELECT version FROM elastic_admin.metadata_log WHERE cluster_name = ? LIMIT 1", DatabaseDescriptor.getClusterName());
-                version = rs.one().getLong("version");
-                logger.warn("forcing metadata.version to {} in elastic_admin.metadata",  version + 1);
+                // Inject a conflicting owner into the exact Paxos slot that the next schema update will reserve.
+                // The publish hook fires on a shard-started update first, so the in-memory metadata version is ahead
+                // of the persisted metadata_log by one already; the later schema publish reserves version + 2.
+                version = e.state().metadata().version();
+                final long forcedVersion = version + 2;
+                logger.warn("forcing metadata.version to {} in elastic_admin.metadata",  forcedVersion);
 
-                // "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source= ?, ts = dateOf(now()) WHERE cluster_name= ? AND v = ? IF version = ?",
                 process(ConsistencyLevel.ONE, "UPDATE elastic_admin.metadata_log SET owner = ?, version = ?, source = ?, ts = dateOf(now()) WHERE cluster_name = ? AND v = ?",
-                        UUID.fromString(StorageService.instance.getLocalHostId()),
-                        version + 1,
+                        concurrentOwner,
+                        forcedVersion,
                         "paxos test",
                         DatabaseDescriptor.getClusterName(),
-                        version + 1);
+                        forcedVersion);
             }
         });
 

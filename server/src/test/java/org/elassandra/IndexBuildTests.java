@@ -66,6 +66,13 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
         assertIndexState(index, IndexMetadata.State.OPEN);
     }
 
+    private void assertSearchHitCount(String index, long expected) throws Exception {
+        assertBusy(() -> assertThat(
+            client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value,
+            equalTo(expected)
+        ));
+    }
+
     @Test
     public void indexRebuildTest() throws Exception {
         indexRebuild(1);
@@ -89,7 +96,7 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
             i++;
             process(ConsistencyLevel.ONE,"insert into " + index + ".t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertSearchHitCount(index, N);
 
         // close index
         closeIndex(index);
@@ -105,12 +112,12 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
         openIndex(index);
         ensureGreen(index);
 
-        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertSearchHitCount(index, N);
 
         // rebuild_index
         StorageService.instance.rebuildSecondaryIndex(numThread, index, "t1", "elastic_t1_idx");
         assertTrue(waitIndexRebuilt(index, Collections.singletonList("t1"), 15000));
-        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        assertSearchHitCount(index, 2 * N);
     }
 
     @Test
@@ -130,7 +137,7 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping(index).setType("t1").setSource(discoverMapping("t1")).get());
         assertTrue(waitIndexRebuilt(index, Collections.singletonList("t1"), 15000));
 
-        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertSearchHitCount(index, N);
     }
 
     @Test
@@ -165,6 +172,6 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
         assertAcked(client().admin().indices().preparePutMapping(index).setType("t1").setSource(discoverMapping("t1")).get());
 
         assertTrue(waitIndexRebuilt(index, Collections.singletonList("t1"), 15000));
-        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertSearchHitCount(index, N);
     }
 }

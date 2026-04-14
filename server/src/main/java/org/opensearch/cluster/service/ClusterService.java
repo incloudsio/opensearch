@@ -486,7 +486,12 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
                 );
                 if (current != null && current.isEmpty() == false) {
                     long persistedVersion = current.one().getLong("version");
-                    if (persistedVersion <= oldMetaData.version()) {
+                    if (persistedVersion == newMetaData.version()) {
+                        java.util.UUID persistedOwner = readMetaDataOwner(newMetaData.version());
+                        if (owner.equals(persistedOwner)) {
+                            applied = true;
+                        }
+                    } else if (persistedVersion <= oldMetaData.version()) {
                         applied = processWriteConditional(
                             org.apache.cassandra.db.ConsistencyLevel.QUORUM,
                             org.apache.cassandra.db.ConsistencyLevel.SERIAL,
@@ -505,6 +510,12 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
                     | org.apache.cassandra.exceptions.RequestValidationException e
             ) {
                 throw new org.opensearch.OpenSearchException("Failed to reconcile metadata log version", e);
+            }
+        }
+        if (applied == false) {
+            java.util.UUID persistedOwner = readMetaDataOwner(newMetaData.version());
+            if (owner.equals(persistedOwner)) {
+                applied = true;
             }
         }
         if (applied == false) {
@@ -780,7 +791,9 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     }
 
     public static final String SETTING_SYSTEM_SYNCHRONOUS_REFRESH = "es.synchronous_refresh";
+
     public static final String SYNCHRONOUS_REFRESH = "synchronous_refresh";
+    public static final String DROP_ON_DELETE_INDEX = "drop_on_delete_index";
     public static final String SNAPSHOT_WITH_SSTABLE = "snapshot_with_sstable";
     public static final String INCLUDE_HOST_ID = "include_node_id";
     public static final String INDEX_ON_COMPACTION = "index_on_compaction";
@@ -790,6 +803,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     public static final String INDEX_INSERT_ONLY = "index_insert_only";
     public static final String INDEX_OPAQUE_STORAGE = "index_opaque_storage";
     public static final String SETTING_SYSTEM_SNAPSHOT_WITH_SSTABLE = "es.snapshot_with_sstable";
+    public static final String SETTING_SYSTEM_DROP_ON_DELETE_INDEX = "es.drop_on_delete_index";
     public static final String SETTING_SYSTEM_INDEX_ON_COMPACTION = "es.index_on_compaction";
     public static final String SETTING_SYSTEM_INDEX_INSERT_ONLY = "es.index_insert_only";
     public static final String SETTING_SYSTEM_INDEX_OPAQUE_STORAGE = "es.index_opaque_storage";

@@ -664,6 +664,16 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
     public static final String SETTING_TABLE = "index.table";
     public static final String SETTING_TABLE_OPTIONS = "index.table_options";
     public static final String SETTING_INDEX_OPAQUE_STORAGE = "index.opaque_storage";
+    public static final String SETTING_DROP_ON_DELETE_INDEX =
+        INDEX_SETTING_PREFIX + org.opensearch.cluster.service.ClusterService.DROP_ON_DELETE_INDEX;
+    public static final org.opensearch.common.settings.Setting<Boolean> INDEX_DROP_ON_DELETE_INDEX_SETTING =
+        org.opensearch.common.settings.Setting.boolSetting(
+            SETTING_DROP_ON_DELETE_INDEX,
+            Boolean.getBoolean(org.opensearch.cluster.service.ClusterService.SETTING_SYSTEM_DROP_ON_DELETE_INDEX),
+            org.opensearch.common.settings.Setting.Property.Dynamic,
+            org.opensearch.common.settings.Setting.Property.IndexScope
+        );
+
     public static final String SETTING_VIRTUAL = "index.virtual";
     public static final String SETTING_VIRTUAL_INDEX = "index.virtual_index";
     public static final String SETTING_REPLICATION = "index.replication";

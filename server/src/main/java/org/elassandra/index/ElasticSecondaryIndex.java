@@ -72,6 +72,7 @@ import org.apache.cassandra.index.transactions.IndexTransaction.Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.service.ElassandraDaemon;
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
@@ -2597,6 +2598,9 @@ public class ElasticSecondaryIndex implements Index {
     {
         needBuild.set(false);
         return () -> {
+            // Delayed initialization can start after live writes already hit Cassandra but before the
+            // secondary index had any started shards; flush first so the SSTable-only build sees them.
+            StorageService.instance.forceKeyspaceFlush(baseCfs.keyspace.getName(), baseCfs.metadata.get().name);
             try (ColumnFamilyStore.RefViewFragment viewFragment = this.baseCfs.selectAndReference(View.selectFunction(SSTableSet.CANONICAL))) {
                 registeredIndex.getBuildTaskSupport()
                         .getIndexBuildTask(1, this.baseCfs, Collections.singleton(registeredIndex), viewFragment.sstables)
