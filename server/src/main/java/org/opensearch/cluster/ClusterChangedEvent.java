@@ -24,6 +24,7 @@ import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.transport.Event;
+import org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.opensearch.cluster.metadata.IndexGraveyard;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.Metadata;
@@ -46,17 +47,6 @@ import java.util.stream.Collectors;
  * An event received by the local node, signaling that the cluster state has changed.
  */
 public class ClusterChangedEvent {
-
-    public enum SchemaUpdate {
-        NO_UPDATE,
-        UPDATE,
-        UPDATE_ASYNCHRONOUS;
-
-        public boolean updated() {
-            return this.ordinal() != 0;
-        }
-    }
-
 
     private final String source;
 

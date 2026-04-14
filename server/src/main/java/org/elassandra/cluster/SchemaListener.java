@@ -37,6 +37,7 @@ import org.elassandra.index.ElasticSecondaryIndex;
 import org.opensearch.cluster.ClusterChangedEvent;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterStateListener;
+import org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.opensearch.cluster.ClusterStateUpdateTask;
 import org.opensearch.cluster.block.ClusterBlocks;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -106,6 +107,11 @@ public class SchemaListener extends SchemaChangeListener implements ClusterState
                 @Override
                 public void onFailure(String source, Exception t) {
                     logger.error("unexpected failure during [{}]", t, source);
+                }
+
+                @Override
+                public SchemaUpdate schemaUpdate() {
+                    return SchemaUpdate.UPDATE;
                 }
             });
         }

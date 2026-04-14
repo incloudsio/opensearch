@@ -41,6 +41,7 @@ import org.opensearch.cluster.ClusterStateApplier;
 import org.opensearch.cluster.ClusterStateListener;
 import org.opensearch.cluster.ClusterStateObserver;
 import org.opensearch.cluster.ClusterStateTaskConfig;
+import org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.opensearch.cluster.LocalNodeMasterListener;
 import org.opensearch.cluster.NodeConnectionsService;
 import org.opensearch.cluster.TimeoutClusterStateListener;
@@ -163,11 +164,19 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     class UpdateTask extends SourcePrioritizedRunnable implements Function<ClusterState, ClusterState> {
         final ClusterApplyListener listener;
         final Function<ClusterState, ClusterState> updateFunction;
+        final SchemaUpdate schemaUpdate;
 
-        UpdateTask(Priority priority, String source, ClusterApplyListener listener, Function<ClusterState, ClusterState> updateFunction) {
+        UpdateTask(
+            Priority priority,
+            String source,
+            ClusterApplyListener listener,
+            Function<ClusterState, ClusterState> updateFunction,
+            SchemaUpdate schemaUpdate
+        ) {
             super(priority, source);
             this.listener = listener;
             this.updateFunction = updateFunction;
+            this.schemaUpdate = schemaUpdate;
         }
 
         @Override
@@ -178,6 +187,10 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         @Override
         public void run() {
             runTask(this);
+        }
+
+        public SchemaUpdate schemaUpdate() {
+            return this.schemaUpdate;
         }
     }
 
@@ -368,7 +381,8 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
                 config.priority(),
                 source,
                 new SafeClusterApplyListener(listener, supplier, logger),
-                executor
+                executor,
+                config.schemaUpdate()
             );
             if (config.timeout() != null) {
                 threadPoolExecutor.execute(
@@ -512,7 +526,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     private void applyChanges(UpdateTask task, ClusterState previousClusterState, ClusterState newClusterState, StopWatch stopWatch) {
-        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState);
+        ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
         // new cluster state, notify all listeners
         final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
         if (nodesDelta.hasChanges() && logger.isInfoEnabled()) {
@@ -543,9 +557,11 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         }
 
         logger.debug("apply cluster state with version {}", newClusterState.version());
-        callClusterStateAppliers(clusterChangedEvent, stopWatch);
 
         nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
+        callClusterStateAppliers(clusterChangedEvent, stopWatch, highPriorityStateAppliers);
+
+        clusterChangedEvent = new ClusterChangedEvent(task.source, newClusterState, previousClusterState, task.schemaUpdate, null);
 
         assert newClusterState.coordinationMetadata()
             .getLastAcceptedConfiguration()
@@ -559,7 +575,9 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         logger.debug("set locally applied cluster state to version {}", newClusterState.version());
         state.set(newClusterState);
 
+        callClusterStateAppliers(clusterChangedEvent, stopWatch, normalPriorityStateAppliers);
         callClusterStateListeners(clusterChangedEvent, stopWatch);
+        callClusterStateAppliers(clusterChangedEvent, stopWatch, lowPriorityStateAppliers);
     }
 
     protected void connectToNodesAndWait(ClusterState newClusterState) {

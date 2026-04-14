@@ -70,6 +70,9 @@ public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
             } else {
                 String inferedCql = cql3Type.asCQL3Type().toString();
                 String existingCql3 = cd.type.asCQL3Type().toString();
+                if (cd.type.isUDT() && cql3Type.isUDT() && stripFrozen(existingCql3).equals(stripFrozen(inferedCql))) {
+                    return;
+                }
                 // cdef.type.asCQL3Type() does not include frozen, nor quote, so can do this check for collection.
                 if (!existingCql3.equals(inferedCql) &&
                     !(existingCql3.endsWith("uuid") && inferedCql.equals("text")) && // #74 uuid is mapped as keyword
@@ -100,6 +103,13 @@ public class ColumnDescriptor implements Comparable<ColumnDescriptor> {
 
     public boolean exists() {
         return this.exists;
+    }
+
+    private static String stripFrozen(String cql) {
+        if (cql != null && cql.startsWith("frozen<") && cql.endsWith(">")) {
+            return cql.substring("frozen<".length(), cql.length() - 1);
+        }
+        return cql;
     }
 
     @Override

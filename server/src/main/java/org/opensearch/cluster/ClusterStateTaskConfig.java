@@ -57,6 +57,20 @@ public interface ClusterStateTaskConfig {
      */
     Priority priority();
 
+    enum SchemaUpdate {
+        NO_UPDATE,
+        UPDATE,
+        UPDATE_ASYNCHRONOUS;
+
+        public boolean updated() {
+            return this.ordinal() != 0;
+        }
+    }
+
+    default SchemaUpdate schemaUpdate() {
+        return SchemaUpdate.NO_UPDATE;
+    }
+
     /**
      * Build a cluster state update task configuration with the
      * specified {@link Priority} and no timeout.
@@ -81,6 +95,15 @@ public interface ClusterStateTaskConfig {
      */
     static ClusterStateTaskConfig build(Priority priority, TimeValue timeout) {
         return new Basic(priority, timeout);
+    }
+
+    static ClusterStateTaskConfig build(Priority priority, TimeValue timeout, SchemaUpdate schemaUpdate) {
+        return new Basic(priority, timeout) {
+            @Override
+            public SchemaUpdate schemaUpdate() {
+                return schemaUpdate;
+            }
+        };
     }
 
     class Basic implements ClusterStateTaskConfig {

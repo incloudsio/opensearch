@@ -492,16 +492,21 @@ public class MetadataCreateIndexService {
             }
 
             final DocumentMapper documentMapper = indexService.mapperService().documentMapper();
+            List<Mutation> mutations = new LinkedList<>();
+            List<Event.SchemaChange> events = new LinkedList<>();
+            java.util.Map<String, Integer> replication = new java.util.LinkedHashMap<>();
+            for (String entry : IndexMetadata.INDEX_SETTING_REPLICATION_SETTING.get(indexMetadata.getSettings())) {
+                int colon = entry.indexOf(':');
+                replication.put(entry.substring(0, colon), Integer.parseInt(entry.substring(colon + 1)));
+            }
+            KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                indexMetadata.keyspace(),
+                indexMetadata.getNumberOfReplicas() + 1,
+                replication,
+                mutations,
+                events
+            );
             if (documentMapper != null && MapperService.DEFAULT_MAPPING.equals(documentMapper.type()) == false) {
-                List<Mutation> mutations = new LinkedList<>();
-                List<Event.SchemaChange> events = new LinkedList<>();
-                KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
-                    indexMetadata.keyspace(),
-                    indexMetadata.getNumberOfReplicas() + 1,
-                    Collections.emptyMap(),
-                    mutations,
-                    events
-                );
                 clusterService.getSchemaManager().updateTableSchema(
                     ksm,
                     documentMapper.type(),
@@ -509,9 +514,9 @@ public class MetadataCreateIndexService {
                     mutations,
                     events
                 );
-                if (mutations.isEmpty() == false) {
-                    MigrationManager.mergeSchema(mutations, clusterService.getSchemaManager().getInhibitedSchemaListeners());
-                }
+            }
+            if (mutations.isEmpty() == false) {
+                MigrationManager.mergeSchema(mutations, clusterService.getSchemaManager().getInhibitedSchemaListeners());
             }
 
             logger.log(

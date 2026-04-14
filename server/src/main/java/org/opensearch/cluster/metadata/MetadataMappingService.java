@@ -244,6 +244,9 @@ public class MetadataMappingService {
             Map<Index, MapperService> indexMapperServices = new HashMap<>();
             ClusterTasksResult.Builder<PutMappingClusterStateUpdateRequest> builder = ClusterTasksResult.builder();
             try {
+                java.util.Collection<org.apache.cassandra.db.Mutation> mutations = new java.util.LinkedList<>();
+                java.util.Collection<org.apache.cassandra.transport.Event.SchemaChange> events = new java.util.LinkedList<>();
+                ClusterStateTaskConfig.SchemaUpdate schemaUpdate = ClusterStateTaskConfig.SchemaUpdate.NO_UPDATE;
                 for (PutMappingClusterStateUpdateRequest request : tasks) {
                     try {
                         for (Index index : request.indices()) {
@@ -255,13 +258,16 @@ public class MetadataMappingService {
                                 mapperService.merge(indexMetadata, MergeReason.MAPPING_RECOVERY);
                             }
                         }
-                        currentState = applyRequest(currentState, request, indexMapperServices);
+                        currentState = applyRequest(currentState, request, indexMapperServices, mutations, events);
                         builder.success(request);
+                        if (request.schemaUpdate().ordinal() > schemaUpdate.ordinal()) {
+                            schemaUpdate = request.schemaUpdate();
+                        }
                     } catch (Exception e) {
                         builder.failure(request, e);
                     }
                 }
-                return builder.build(currentState);
+                return builder.build(currentState, schemaUpdate, mutations, events);
             } finally {
                 IOUtils.close(indexMapperServices.values());
             }
@@ -270,7 +276,9 @@ public class MetadataMappingService {
         private ClusterState applyRequest(
             ClusterState currentState,
             PutMappingClusterStateUpdateRequest request,
-            Map<Index, MapperService> indexMapperServices
+            Map<Index, MapperService> indexMapperServices,
+            java.util.Collection<org.apache.cassandra.db.Mutation> mutations,
+            java.util.Collection<org.apache.cassandra.transport.Event.SchemaChange> events
         ) throws IOException {
             String mappingType = request.type();
             CompressedXContent mappingUpdateSource = new CompressedXContent(request.source());
@@ -384,6 +392,53 @@ public class MetadataMappingService {
                  * statement.
                  */
                 builder.put(indexMetadataBuilder);
+                IndexMetadata updatedIndexMetadata = builder.get(index.getName());
+                if (updatedMapping && MapperService.DEFAULT_MAPPING.equals(mergedMapper.type()) == false) {
+                    java.util.Map<String, Integer> replication = new java.util.LinkedHashMap<>();
+                    for (String entry : IndexMetadata.INDEX_SETTING_REPLICATION_SETTING.get(updatedIndexMetadata.getSettings())) {
+                        int colon = entry.indexOf(':');
+                        replication.put(entry.substring(0, colon), Integer.parseInt(entry.substring(colon + 1)));
+                    }
+                    org.apache.cassandra.schema.KeyspaceMetadata ksm = clusterService.getSchemaManager().createOrUpdateKeyspace(
+                        updatedIndexMetadata.keyspace(),
+                        updatedIndexMetadata.getNumberOfReplicas() + 1,
+                        replication,
+                        mutations,
+                        events
+                    );
+                    clusterService.getSchemaManager().updateTableSchema(
+                        ksm,
+                        mergedMapper.type(),
+                        java.util.Collections.singletonMap(
+                            updatedIndexMetadata.getIndex(),
+                            org.apache.cassandra.utils.Pair.create(updatedIndexMetadata, mapperService)
+                        ),
+                        mutations,
+                        events
+                    );
+                    if (mutations.isEmpty() == false) {
+                        org.apache.cassandra.schema.MigrationManager.mergeSchema(
+                            mutations,
+                            clusterService.getSchemaManager().getInhibitedSchemaListeners()
+                        );
+                    }
+                    org.opensearch.index.IndexService liveIndexService = indicesService.indexService(updatedIndexMetadata.getIndex());
+                    if (liveIndexService != null) {
+                        liveIndexService.mapperService().merge(updatedIndexMetadata, MergeReason.MAPPING_UPDATE);
+                    }
+                    org.elassandra.index.ElasticSecondaryIndex elasticSecondaryIndex =
+                        org.elassandra.index.ElasticSecondaryIndex.elasticSecondayIndices.get(
+                            updatedIndexMetadata.keyspace()
+                                + "."
+                                + org.elassandra.cluster.SchemaManager.typeToCfName(updatedIndexMetadata.keyspace(), mergedMapper.type())
+                        );
+                    if (elasticSecondaryIndex != null) {
+                        Metadata mappingMetadata = Metadata.builder(currentState.metadata()).put(updatedIndexMetadata, false).build();
+                        elasticSecondaryIndex.updateMappingInfo(
+                            ClusterState.builder(currentState).metadata(mappingMetadata).build()
+                        );
+                    }
+                }
                 updated |= updatedMapping;
             }
             if (updated) {
@@ -403,7 +458,7 @@ public class MetadataMappingService {
         clusterService.submitStateUpdateTask(
             "put-mapping " + Strings.arrayToCommaDelimitedString(request.indices()),
             request,
-            ClusterStateTaskConfig.build(Priority.HIGH, request.masterNodeTimeout()),
+            ClusterStateTaskConfig.build(Priority.HIGH, request.masterNodeTimeout(), request.schemaUpdate()),
             putMappingExecutor,
             new AckedClusterStateTaskListener() {
 

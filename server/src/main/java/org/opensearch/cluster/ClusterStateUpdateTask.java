@@ -32,10 +32,15 @@
 
 package org.opensearch.cluster;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.Priority;
 import org.opensearch.common.unit.TimeValue;
 
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -60,8 +65,12 @@ public abstract class ClusterStateUpdateTask
     @Override
     public final ClusterTasksResult<ClusterStateUpdateTask> execute(ClusterState currentState, List<ClusterStateUpdateTask> tasks)
         throws Exception {
-        ClusterState result = execute(currentState);
-        return ClusterTasksResult.<ClusterStateUpdateTask>builder().successes(tasks).build(result);
+        Collection<Mutation> mutations = new LinkedList<>();
+        Collection<Event.SchemaChange> events = new LinkedList<>();
+        ClusterState result = execute(currentState, mutations, events);
+        return ClusterTasksResult.<ClusterStateUpdateTask>builder()
+            .successes(tasks)
+            .build(result, tasks.stream().map(ClusterStateUpdateTask::schemaUpdate).max(Comparator.comparing(Enum::ordinal)).get(), mutations, events);
     }
 
     @Override
@@ -74,6 +83,11 @@ public abstract class ClusterStateUpdateTask
      * should be changed.
      */
     public abstract ClusterState execute(ClusterState currentState) throws Exception;
+
+    public ClusterState execute(ClusterState currentState, Collection<Mutation> mutations, Collection<Event.SchemaChange> events)
+        throws Exception {
+        return execute(currentState);
+    }
 
     /**
      * A callback called when execute fails.

@@ -41,6 +41,7 @@ import org.opensearch.action.support.ActionFilters;
 import org.opensearch.action.support.master.AcknowledgedResponse;
 import org.opensearch.action.support.master.TransportMasterNodeAction;
 import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.ClusterStateTaskConfig;
 import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
 import org.opensearch.cluster.block.ClusterBlockException;
 import org.opensearch.cluster.block.ClusterBlockLevel;
@@ -172,6 +173,7 @@ public class TransportPutMappingAction extends TransportMasterNodeAction<PutMapp
     ) {
         PutMappingClusterStateUpdateRequest updateRequest = new PutMappingClusterStateUpdateRequest().ackTimeout(request.timeout())
             .masterNodeTimeout(request.masterNodeTimeout())
+            .schemaUpdate(ClusterStateTaskConfig.SchemaUpdate.UPDATE)
             .indices(concreteIndices)
             .type(request.type())
             .source(request.source());

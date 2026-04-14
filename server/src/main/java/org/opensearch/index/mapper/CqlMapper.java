@@ -64,6 +64,9 @@ public interface CqlMapper {
     ByteBuffer cqlName();
 
     default CQL3Type.Raw collection(CQL3Type.Raw rawType) {
+        if (rawType != null && rawType.supportsFreezing() && !rawType.isFrozen()) {
+            rawType = rawType.freeze();
+        }
         switch (cqlCollection()) {
             case LIST:
                 return CQL3Type.Raw.list(rawType);

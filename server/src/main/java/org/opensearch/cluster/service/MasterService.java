@@ -32,6 +32,8 @@
 
 package org.opensearch.cluster.service;
 
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.transport.Event;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
@@ -42,6 +44,7 @@ import org.opensearch.cluster.ClusterChangedEvent;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.ClusterState.Builder;
 import org.opensearch.cluster.ClusterStateTaskConfig;
+import org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.opensearch.cluster.ClusterStateTaskExecutor;
 import org.opensearch.cluster.ClusterStateTaskExecutor.ClusterTasksResult;
 import org.opensearch.cluster.ClusterStateTaskListener;
@@ -72,8 +75,9 @@ import org.opensearch.threadpool.Scheduler;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -266,7 +270,15 @@ public class MasterService extends AbstractLifecycleComponent {
             }
             final long publicationStartTime = threadPool.relativeTimeInMillis();
             try {
-                ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(summary, newClusterState, previousClusterState);
+                ClusterChangedEvent clusterChangedEvent = new ClusterChangedEvent(
+                    summary,
+                    newClusterState,
+                    previousClusterState,
+                    taskOutputs.schemaUpdate,
+                    taskOutputs.mutations,
+                    taskOutputs.events,
+                    taskOutputs.taskInputs
+                );
                 // new cluster state, notify all listeners
                 final DiscoveryNodes.Delta nodesDelta = clusterChangedEvent.nodesDelta();
                 if (nodesDelta.hasChanges() && logger.isInfoEnabled()) {
@@ -383,7 +395,10 @@ public class MasterService extends AbstractLifecycleComponent {
             previousClusterState,
             newClusterState,
             getNonFailedTasks(taskInputs, clusterTasksResult),
-            clusterTasksResult.executionResults
+            clusterTasksResult.executionResults,
+            clusterTasksResult.schemaUpdate,
+            clusterTasksResult.mutations,
+            clusterTasksResult.events
         );
     }
 
@@ -466,19 +481,28 @@ public class MasterService extends AbstractLifecycleComponent {
         final ClusterState newClusterState;
         final List<Batcher.UpdateTask> nonFailedTasks;
         final Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults;
+        final SchemaUpdate schemaUpdate;
+        final Collection<Mutation> mutations;
+        final Collection<Event.SchemaChange> events;
 
         TaskOutputs(
             TaskInputs taskInputs,
             ClusterState previousClusterState,
             ClusterState newClusterState,
             List<Batcher.UpdateTask> nonFailedTasks,
-            Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults
+            Map<Object, ClusterStateTaskExecutor.TaskResult> executionResults,
+            SchemaUpdate schemaUpdate,
+            Collection<Mutation> mutations,
+            Collection<Event.SchemaChange> events
         ) {
             this.taskInputs = taskInputs;
             this.previousClusterState = previousClusterState;
             this.newClusterState = newClusterState;
             this.nonFailedTasks = nonFailedTasks;
             this.executionResults = executionResults;
+            this.schemaUpdate = schemaUpdate;
+            this.mutations = mutations;
+            this.events = events;
         }
 
         void publishingFailed(FailedToCommitClusterStateException t) {

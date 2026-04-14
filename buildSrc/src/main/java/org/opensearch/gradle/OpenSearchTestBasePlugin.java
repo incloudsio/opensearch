@@ -185,6 +185,33 @@ public class OpenSearchTestBasePlugin implements Plugin<Project> {
             }
 
             // TODO: remove setting logging level via system property
+            /* Elassandra test defaults: Cassandra config + real-time search + drop backing tables */
+            if (project.getPath().equals(":server")) {
+                String cassandraHome = System.getProperty("cassandra.home", test.getWorkingDir().getAbsolutePath());
+                String cassandraConfig = System.getProperty(
+                    "cassandra.config",
+                    "file://" + project.getProjectDir() + "/src/test/resources/conf/cassandra-opensearch-sidecar.yaml"
+                );
+                String cassandraConfigDir = System.getProperty("cassandra.config.dir", project.getProjectDir() + "/src/test/resources/conf");
+                String cassandraRackDc = System.getProperty(
+                    "cassandra-rackdc.properties",
+                    "file://" + cassandraConfigDir + "/cassandra-rackdc.properties"
+                );
+                String logbackConfig = System.getProperty(
+                    "logback.configurationFile",
+                    project.getProjectDir() + "/src/test/resources/conf/logback.xml"
+                );
+                test.systemProperty("cassandra.home", cassandraHome);
+                test.systemProperty("cassandra.logdir", test.getWorkingDir().getAbsolutePath());
+                test.systemProperty("logback.configurationFile", logbackConfig);
+                test.systemProperty("cassandra.config", cassandraConfig);
+                test.systemProperty("cassandra.config.dir", cassandraConfigDir);
+                test.systemProperty("cassandra-rackdc.properties", cassandraRackDc);
+                test.systemProperty("cassandra.storagedir", test.getWorkingDir().getAbsolutePath());
+                test.systemProperty("cassandra.custom_query_handler_class", "org.elassandra.index.ElasticQueryHandler");
+            }
+            test.systemProperty("es.synchronous_refresh", "true");
+            test.systemProperty("es.drop_on_delete_index", "true");
             test.systemProperty("tests.logger.level", "WARN");
             System.getProperties().entrySet().forEach(entry -> {
                 if ((entry.getKey().toString().startsWith("tests.") || entry.getKey().toString().startsWith("opensearch."))) {

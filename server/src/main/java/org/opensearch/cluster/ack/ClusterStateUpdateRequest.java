@@ -32,6 +32,7 @@
 
 package org.opensearch.cluster.ack;
 
+import org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate;
 import org.opensearch.common.unit.TimeValue;
 
 /**
@@ -42,6 +43,7 @@ public abstract class ClusterStateUpdateRequest<T extends ClusterStateUpdateRequ
 
     private TimeValue ackTimeout;
     private TimeValue masterNodeTimeout;
+    private SchemaUpdate schemaUpdate = SchemaUpdate.NO_UPDATE;
 
     /**
      * Returns the maximum time interval to wait for acknowledgements
@@ -75,6 +77,16 @@ public abstract class ClusterStateUpdateRequest<T extends ClusterStateUpdateRequ
     @SuppressWarnings("unchecked")
     public T masterNodeTimeout(TimeValue masterNodeTimeout) {
         this.masterNodeTimeout = masterNodeTimeout;
+        return (T) this;
+    }
+
+    public SchemaUpdate schemaUpdate() {
+        return schemaUpdate;
+    }
+
+    @SuppressWarnings("unchecked")
+    public T schemaUpdate(SchemaUpdate schemaUpdate) {
+        this.schemaUpdate = schemaUpdate;
         return (T) this;
     }
 }

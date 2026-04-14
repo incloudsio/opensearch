@@ -27,6 +27,7 @@ import org.opensearch.test.OpenSearchSingleNodeTestCase;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -44,6 +45,27 @@ import static org.hamcrest.Matchers.equalTo;
 public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
     static long N = 10;
 
+    private String randomIndexName(String prefix) {
+        return (prefix + "_" + randomAlphaOfLength(8)).toLowerCase(Locale.ROOT);
+    }
+
+    private void assertIndexState(String index, IndexMetadata.State expectedState) throws Exception {
+        assertBusy(() -> assertThat(
+            client().admin().cluster().prepareState().get().getState().metadata().index(index).getState(),
+            equalTo(expectedState)
+        ));
+    }
+
+    private void closeIndex(String index) throws Exception {
+        client().admin().indices().prepareClose(index).get();
+        assertIndexState(index, IndexMetadata.State.CLOSE);
+    }
+
+    private void openIndex(String index) throws Exception {
+        client().admin().indices().prepareOpen(index).get();
+        assertIndexState(index, IndexMetadata.State.OPEN);
+    }
+
     @Test
     public void indexRebuildTest() throws Exception {
         indexRebuild(1);
@@ -55,58 +77,60 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
     }
 
     public void indexRebuild(int numThread) throws Exception {
-        createIndex("test");
-        ensureGreen("test");
+        String index = randomIndexName("test");
+        createIndex(index);
+        ensureGreen(index);
 
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b text, primary key (a) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS " + index + ".t1 ( a int,b text, primary key (a) )");
 
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
+        assertAcked(client().admin().indices().preparePutMapping(index).setType("t1").setSource(discoverMapping("t1")).get());
         int i=0;
         for(int j=0 ; j < N; j++) {
             i++;
-            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
+            process(ConsistencyLevel.ONE,"insert into " + index + ".t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
 
         // close index
-        assertAcked(client().admin().indices().prepareClose("test").get());
+        closeIndex(index);
 
         for(int j=0 ; j < N; j++) {
             i++;
-            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
+            process(ConsistencyLevel.ONE,"insert into " + index + ".t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        UntypedResultSet rs = process(ConsistencyLevel.ONE,"select count(*) from test.t1");
-        StorageService.instance.forceKeyspaceFlush("test","t1");
+        UntypedResultSet rs = process(ConsistencyLevel.ONE,"select count(*) from " + index + ".t1");
+        StorageService.instance.forceKeyspaceFlush(index,"t1");
 
         // open index
-        assertAcked(client().admin().indices().prepareOpen("test").get());
-        ensureGreen("test");
+        openIndex(index);
+        ensureGreen(index);
 
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
 
         // rebuild_index
-        StorageService.instance.rebuildSecondaryIndex(3, "test", "t1", "elastic_t1_idx");
-        assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
+        StorageService.instance.rebuildSecondaryIndex(numThread, index, "t1", "elastic_t1_idx");
+        assertTrue(waitIndexRebuilt(index, Collections.singletonList("t1"), 15000));
+        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(2*N));
     }
 
     @Test
     public void indexFirstBuildTest() throws Exception {
-        createIndex("test");
-        ensureGreen("test");
+        String index = randomIndexName("test");
+        createIndex(index);
+        ensureGreen(index);
 
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b text, primary key (a) )");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS " + index + ".t1 ( a int,b text, primary key (a) )");
         int i=0;
         for(int j=0 ; j < N; j++) {
             i++;
-            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
+            process(ConsistencyLevel.ONE,"insert into " + index + ".t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
-        StorageService.instance.forceKeyspaceFlush("test","t1");
+        StorageService.instance.forceKeyspaceFlush(index,"t1");
 
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
-        assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
+        assertAcked(client().admin().indices().preparePutMapping(index).setType("t1").setSource(discoverMapping("t1")).get());
+        assertTrue(waitIndexRebuilt(index, Collections.singletonList("t1"), 15000));
 
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
     }
 
     @Test
@@ -124,22 +148,23 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testDelayedIndexBuild() throws Exception {
-        process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS test WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1':'1' }");
-        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b text, primary key (a) )");
+        String index = randomIndexName("test");
+        process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS " + index + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1':'1' }");
+        process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS " + index + ".t1 ( a int,b text, primary key (a) )");
         int i=0;
         for(int j=0 ; j < N; j++) {
             i++;
-            process(ConsistencyLevel.ONE,"insert into test.t1 (a,b) VALUES (?,?)", i, "x"+i);
+            process(ConsistencyLevel.ONE,"insert into " + index + ".t1 (a,b) VALUES (?,?)", i, "x"+i);
         }
 
-        process(ConsistencyLevel.ONE,"CREATE CUSTOM INDEX elastic_t1_idx ON test.t1 () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';");
-        assertFalse(waitIndexRebuilt("test", Collections.singletonList("t1"), 5000));
+        process(ConsistencyLevel.ONE,"CREATE CUSTOM INDEX elastic_t1_idx ON " + index + ".t1 () USING 'org.elassandra.index.ExtendedElasticSecondaryIndex';");
+        assertFalse(waitIndexRebuilt(index, Collections.singletonList("t1"), 5000));
 
-        createIndex("test");
-        ensureGreen("test");
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("t1").setSource(discoverMapping("t1")).get());
+        createIndex(index);
+        ensureGreen(index);
+        assertAcked(client().admin().indices().preparePutMapping(index).setType("t1").setSource(discoverMapping("t1")).get());
 
-        assertTrue(waitIndexRebuilt("test", Collections.singletonList("t1"), 15000));
-        assertThat(client().prepareSearch().setIndices("test").setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
+        assertTrue(waitIndexRebuilt(index, Collections.singletonList("t1"), 15000));
+        assertThat(client().prepareSearch().setIndices(index).setTypes("t1").setQuery(QueryBuilders.matchAllQuery()).get().getHits().getTotalHits().value, equalTo(N));
     }
 }
