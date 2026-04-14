@@ -198,8 +198,15 @@ public class DocumentMapperParser {
 
     public static void checkNoRemainingFields(Map<?, ?> fieldNodeMap, Version indexVersionCreated, String message) {
         if (!fieldNodeMap.isEmpty()) {
-            throw new MapperParsingException(message + getRemainingFields(fieldNodeMap));
+            fieldNodeMap.keySet().removeIf(DocumentMapperParser::isElassandraCqlField);
+            if (!fieldNodeMap.isEmpty()) {
+                throw new MapperParsingException(message + getRemainingFields(fieldNodeMap));
+            }
         }
+    }
+
+    private static boolean isElassandraCqlField(Object key) {
+        return key != null && key.toString().startsWith("cql_");
     }
 
     private static String getRemainingFields(Map<?, ?> map) {

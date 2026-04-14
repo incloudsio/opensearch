@@ -374,13 +374,40 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     // --- Elassandra side-car compile stubs (no runtime behaviour; full port replaces these) ---
 
     public String getExtensionKey(org.opensearch.cluster.metadata.IndexMetadata indexMetaData) {
-        return indexMetaData.getIndex().getName();
+        return getElasticAdminKeyspaceName() + "/" + indexMetaData.getIndex().getName();
     }
 
     public void putIndexMetaDataExtension(
         org.opensearch.cluster.metadata.IndexMetadata indexMetaData,
         java.util.Map<String, java.nio.ByteBuffer> extensions
     ) {
+        try {
+            java.util.Map<String, String> params = new java.util.HashMap<>();
+            params.put("binary", "true");
+            params.put(
+                org.opensearch.cluster.metadata.Metadata.CONTEXT_MODE_PARAM,
+                org.opensearch.cluster.metadata.Metadata.CONTEXT_MODE_GATEWAY
+            );
+            org.opensearch.common.xcontent.XContentBuilder builder =
+                org.opensearch.common.xcontent.XContentFactory.contentBuilder(org.opensearch.common.xcontent.XContentType.SMILE);
+            builder.startObject();
+            org.opensearch.cluster.metadata.IndexMetadata.Builder.toXContent(
+                indexMetaData,
+                builder,
+                new org.opensearch.common.xcontent.ToXContent.MapParams(params)
+            );
+            builder.endObject();
+            extensions.put(
+                getExtensionKey(indexMetaData),
+                java.nio.ByteBuffer.wrap(
+                    org.opensearch.common.bytes.BytesReference.toBytes(
+                        org.opensearch.common.bytes.BytesReference.bytes(builder)
+                    )
+                )
+            );
+        } catch (java.io.IOException e) {
+            throw new org.opensearch.OpenSearchException("Failed to serialize index metadata", e);
+        }
     }
 
     public void setDiscovery(org.opensearch.discovery.Discovery discovery) {
@@ -417,9 +444,102 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
         org.opensearch.cluster.metadata.Metadata newMetaData,
         String source
     ) throws org.elassandra.ConcurrentMetaDataUpdateException, org.apache.cassandra.exceptions.UnavailableException, java.io.IOException {
+        if (newMetaData.clusterUUID().equals(localNode().getId()) == false) {
+            return;
+        }
+        if (newMetaData.clusterUUID().equals(state().metadata().clusterUUID()) && newMetaData.version() < state().metadata().version()) {
+            return;
+        }
+        final java.util.UUID owner = localNode().uuid();
+        final String updateMetaDataQuery = String.format(
+            java.util.Locale.ROOT,
+            "UPDATE \"%s\".\"%s\" SET owner = ?, version = ?, source = ?, ts = dateOf(now()) "
+                + "WHERE cluster_name = ? AND v = ? IF version = ?",
+            getElasticAdminKeyspaceName(),
+            ELASTIC_ADMIN_METADATA_TABLE
+        );
+        final String selectVersionQuery = String.format(
+            java.util.Locale.ROOT,
+            "SELECT version FROM \"%s\".\"%s\" WHERE cluster_name = ? LIMIT 1",
+            getElasticAdminKeyspaceName(),
+            ELASTIC_ADMIN_METADATA_TABLE
+        );
+        boolean applied = processWriteConditional(
+            org.apache.cassandra.db.ConsistencyLevel.QUORUM,
+            org.apache.cassandra.db.ConsistencyLevel.SERIAL,
+            updateMetaDataQuery,
+            owner,
+            newMetaData.version(),
+            source,
+            org.apache.cassandra.config.DatabaseDescriptor.getClusterName(),
+            newMetaData.version(),
+            newMetaData.version() - 1
+        );
+        if (applied == false) {
+            try {
+                org.apache.cassandra.cql3.UntypedResultSet current = processWithQueryHandler(
+                    org.apache.cassandra.db.ConsistencyLevel.SERIAL,
+                    null,
+                    org.apache.cassandra.service.ClientState.forInternalCalls(),
+                    selectVersionQuery,
+                    org.apache.cassandra.config.DatabaseDescriptor.getClusterName()
+                );
+                if (current != null && current.isEmpty() == false) {
+                    long persistedVersion = current.one().getLong("version");
+                    if (persistedVersion <= oldMetaData.version()) {
+                        applied = processWriteConditional(
+                            org.apache.cassandra.db.ConsistencyLevel.QUORUM,
+                            org.apache.cassandra.db.ConsistencyLevel.SERIAL,
+                            updateMetaDataQuery,
+                            owner,
+                            newMetaData.version(),
+                            source,
+                            org.apache.cassandra.config.DatabaseDescriptor.getClusterName(),
+                            newMetaData.version(),
+                            persistedVersion
+                        );
+                    }
+                }
+            } catch (
+                org.apache.cassandra.exceptions.RequestExecutionException
+                    | org.apache.cassandra.exceptions.RequestValidationException e
+            ) {
+                throw new org.opensearch.OpenSearchException("Failed to reconcile metadata log version", e);
+            }
+        }
+        if (applied == false) {
+            throw new org.elassandra.ConcurrentMetaDataUpdateException(owner, newMetaData.version());
+        }
     }
 
     public java.util.UUID readMetaDataOwner(long version) {
+        final String selectOwnerMetadataQuery = String.format(
+            java.util.Locale.ROOT,
+            "SELECT owner FROM \"%s\".\"%s\" WHERE cluster_name = ? AND v = ?",
+            getElasticAdminKeyspaceName(),
+            ELASTIC_ADMIN_METADATA_TABLE
+        );
+        final int attempts = Integer.getInteger("elassandra.metadata.read.attempts", 10);
+        for (int i = 0; i < attempts; i++) {
+            try {
+                org.apache.cassandra.cql3.UntypedResultSet rs = processWithQueryHandler(
+                    org.apache.cassandra.db.ConsistencyLevel.SERIAL,
+                    null,
+                    org.apache.cassandra.service.ClientState.forInternalCalls(),
+                    selectOwnerMetadataQuery,
+                    getElasticsearchClusterName(settings),
+                    version
+                );
+                if (rs != null && rs.isEmpty() == false) {
+                    return rs.one().getUUID("owner");
+                }
+            } catch (org.apache.cassandra.exceptions.RequestTimeoutException e) {
+                // Retry SERIAL reads: a timeout here leaves no better recovery path for metadata CAS ownership checks.
+            } catch (org.apache.cassandra.exceptions.RequestExecutionException
+                | org.apache.cassandra.exceptions.RequestValidationException e) {
+                throw new org.opensearch.OpenSearchException("Failed to read metadata owner for version=" + version, e);
+            }
+        }
         return null;
     }
 
@@ -624,12 +744,23 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
 
     /** CQL extension key naming {@code <elastic_admin_ks>(_<dc>)?/<index>}. */
     public boolean isValidExtensionKey(String extensionName) {
-        return extensionName != null && extensionName.contains("/");
+        return extensionName != null && extensionName.startsWith(getElasticAdminKeyspaceName() + "/");
     }
 
     /** Deserialize index metadata from a table extension cell (fork parity; minimal stub). */
     public org.opensearch.cluster.metadata.IndexMetadata getIndexMetaDataFromExtension(java.nio.ByteBuffer value) {
-        return org.opensearch.cluster.metadata.IndexMetadata.builder("__extension__").numberOfShards(1).numberOfReplicas(0).build();
+        try (
+            org.opensearch.common.xcontent.XContentParser parser = org.opensearch.common.xcontent.XContentType.SMILE.xContent().createParser(
+                org.opensearch.common.xcontent.NamedXContentRegistry.EMPTY,
+                org.opensearch.common.xcontent.DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                org.apache.cassandra.utils.ByteBufferUtil.getArray(value)
+            )
+        ) {
+            parser.nextToken();
+            return org.opensearch.cluster.metadata.IndexMetadata.Builder.fromXContent(parser);
+        } catch (java.io.IOException e) {
+            throw new org.opensearch.OpenSearchException("Failed to deserialize index metadata", e);
+        }
     }
 
     /** Build secondary index name from a CQL table name (fork parity). */
@@ -779,8 +910,18 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     ) throws org.apache.cassandra.exceptions.RequestExecutionException,
              org.apache.cassandra.exceptions.RequestValidationException,
              org.apache.cassandra.exceptions.InvalidRequestException {
-        processWithQueryHandler(cl, serialCl, org.apache.cassandra.service.ClientState.forInternalCalls(), query, values);
-        return true;
+        org.apache.cassandra.cql3.UntypedResultSet result =
+            processWithQueryHandler(cl, serialCl, org.apache.cassandra.service.ClientState.forInternalCalls(), query, values);
+        if (serialCl == null) {
+            return true;
+        }
+        if (result != null && result.isEmpty() == false) {
+            org.apache.cassandra.cql3.UntypedResultSet.Row row = result.one();
+            if (row.has("[applied]")) {
+                return row.getBoolean("[applied]");
+            }
+        }
+        return false;
     }
 
 }

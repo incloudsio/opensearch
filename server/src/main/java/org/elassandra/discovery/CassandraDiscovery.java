@@ -1028,7 +1028,18 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         final org.opensearch.action.ActionListener<Void> publishListener,
         final AckListener ackListener) {
         ClusterState previousClusterState = clusterChangedEvent.previousState();
-        ClusterState newClusterState = clusterChangedEvent.state();
+        ClusterState newClusterState = normalizeSchemaUpdateClusterState(
+            clusterChangedEvent.schemaUpdate(),
+            previousClusterState,
+            clusterChangedEvent.state()
+        );
+        logger.warn(
+            "publish source={} schemaUpdate={} localNode={} metadata={}",
+            clusterChangedEvent.source(),
+            clusterChangedEvent.schemaUpdate(),
+            localNode().getId(),
+            newClusterState.metadata().x2()
+        );
 
         long startTimeNS = System.nanoTime();
         try {
@@ -1068,7 +1079,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         logger.debug("Coordinator update source={} metadata={}", clusterChangedEvent.source(), clusterChangedEvent.state().metadata().x2());
 
         ClusterState previousClusterState = clusterChangedEvent.previousState();
-        ClusterState newClusterState = clusterChangedEvent.state();
+        ClusterState newClusterState = normalizeSchemaUpdateClusterState(
+            clusterChangedEvent.schemaUpdate(),
+            previousClusterState,
+            clusterChangedEvent.state()
+        );
         DiscoveryNodes nodes = clusterChangedEvent.state().nodes();
         DiscoveryNode localNode = nodes.getLocalNode();
 
@@ -1088,6 +1103,12 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
         try {
             // PAXOS schema update commit
+            logger.warn(
+                "commit metadata source={} prev={} next={}",
+                clusterChangedEvent.source(),
+                previousClusterState.metadata().x2(),
+                newClusterState.metadata().x2()
+            );
             clusterService.commitMetaData(previousClusterState.metadata(), newClusterState.metadata(), clusterChangedEvent.source());
 
             // compute alive node for awaiting applied acknowledgment
@@ -1163,6 +1184,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             // should replay the task later when current cluster state will match the expected metadata uuid and version
             logger.warn("PAXOS concurrent update, source={} metadata={}, resubmit task on next metadata change",
                     clusterChangedEvent.source(), newClusterState.metadata().x2());
+            ackListener.onNodeAck(localNode, null);
             resubmitTaskOnNextChange(clusterChangedEvent);
             return;
         } catch(UnavailableException e) {
@@ -1244,7 +1266,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * Publish a local cluster state update (no coordination) coming from a CQL schema update.
      */
     void publishLocalUpdate(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) {
-        ClusterState newClusterState = clusterChangedEvent.state();
+        ClusterState newClusterState = rebaseLocalClusterState(clusterChangedEvent);
         logger.debug("Local update source={} metadata={}", clusterChangedEvent.source(), newClusterState.metadata().x2());
         final AtomicBoolean processedOrFailed = new AtomicBoolean();
         pendingStatesQueue.addPending(newClusterState,
@@ -1282,23 +1304,120 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         }
     }
 
+    private ClusterState rebaseLocalClusterState(ClusterChangedEvent clusterChangedEvent) {
+        final ClusterState previousState = clusterChangedEvent.previousState();
+        final ClusterState newClusterState = clusterChangedEvent.state();
+        final Metadata previousMetaData = previousState.metadata();
+        final Metadata newMetaData = newClusterState.metadata();
+
+        if (newMetaData == previousMetaData) {
+            return newClusterState;
+        }
+
+        final boolean staleVersion = newMetaData.version() <= previousMetaData.version();
+        final boolean staleCoordinator = newMetaData.clusterUUID().equals(previousMetaData.clusterUUID()) == false;
+        if (staleVersion == false && staleCoordinator == false) {
+            return newClusterState;
+        }
+
+        final String coordinatorId = resolveCoordinatorId(previousMetaData.clusterUUID());
+        final Metadata rebasedMetaData = Metadata.builder(newMetaData)
+            .clusterUUID(coordinatorId)
+            .version(staleVersion ? previousMetaData.version() + 1 : newMetaData.version())
+            .build();
+        logger.debug(
+            "rebasing local update source={} metadata={} -> {}",
+            clusterChangedEvent.source(),
+            newMetaData.x2(),
+            rebasedMetaData.x2()
+        );
+        return ClusterState.builder(newClusterState).metadata(rebasedMetaData).build();
+    }
+
+    private ClusterState normalizeSchemaUpdateClusterState(
+        ClusterStateTaskConfig.SchemaUpdate schemaUpdate,
+        ClusterState previousClusterState,
+        ClusterState newClusterState
+    ) {
+        if (schemaUpdate.updated() == false || ClusterState.UNKNOWN_UUID.equals(newClusterState.metadata().clusterUUID()) == false) {
+            return newClusterState;
+        }
+
+        final String coordinatorId = resolveCoordinatorId(previousClusterState.metadata().clusterUUID());
+        return ClusterState.builder(newClusterState)
+            .metadata(Metadata.builder(newClusterState.metadata()).clusterUUID(coordinatorId).build())
+            .build();
+    }
+
+    private String resolveCoordinatorId(String clusterUUID) {
+        return ClusterState.UNKNOWN_UUID.equals(clusterUUID) ? localNode().getId() : clusterUUID;
+    }
+
     protected void resubmitTaskOnNextChange(final ClusterChangedEvent clusterChangedEvent) {
         final long resubmitTimeMillis = System.currentTimeMillis();
-        clusterService.addListener(new ClusterStateListener() {
+        final Metadata baselineMetaData = clusterChangedEvent.previousState().metadata();
+        final AtomicBoolean replayed = new AtomicBoolean(false);
+        final ClusterStateListener listener = new ClusterStateListener() {
             @Override
             public void clusterChanged(ClusterChangedEvent event) {
-                if (event.metaDataChanged()) {
-                    final long lostTimeMillis = System.currentTimeMillis() - resubmitTimeMillis;
-                    Priority priority = Priority.URGENT;
-                    TimeValue timeout = TimeValue.timeValueMillis(30*1000 - lostTimeMillis);
-                    Map<Object, ClusterStateTaskListener> map = clusterChangedEvent.taskInputs().updateTasksToMap(priority, lostTimeMillis);
-                    logger.warn("metadata={} => resubmit delayed update source={} tasks={} priority={} remaing timeout={}",
-                            event.state().metadata().x2(), clusterChangedEvent.source(), clusterChangedEvent.taskInputs().updateTasks, priority, timeout);
-                    clusterService.submitStateUpdateTasks(clusterChangedEvent.source(), map, ClusterStateTaskConfig.build(priority, timeout), clusterChangedEvent.taskInputs().executor);
-                    clusterService.removeListener(this); // replay only once.
-                }
+                tryResubmitDelayedUpdate(clusterChangedEvent, baselineMetaData, resubmitTimeMillis, replayed, this, event.state());
             }
-        });
+        };
+        clusterService.addListener(listener);
+        tryResubmitDelayedUpdate(clusterChangedEvent, baselineMetaData, resubmitTimeMillis, replayed, listener, clusterService.state());
+    }
+
+    private void tryResubmitDelayedUpdate(
+        ClusterChangedEvent clusterChangedEvent,
+        Metadata baselineMetaData,
+        long resubmitTimeMillis,
+        AtomicBoolean replayed,
+        ClusterStateListener listener,
+        ClusterState currentState
+    ) {
+        if (metadataChangedSince(currentState.metadata(), baselineMetaData) == false) {
+            return;
+        }
+        if (replayed.compareAndSet(false, true) == false) {
+            return;
+        }
+
+        final long lostTimeMillis = System.currentTimeMillis() - resubmitTimeMillis;
+        final long remainingTimeMillis = 30 * 1000L - lostTimeMillis;
+        clusterService.removeListener(listener);
+        if (remainingTimeMillis <= 0L) {
+            logger.warn(
+                "metadata={} => drop expired delayed update source={} tasks={} lostTimeMillis={}",
+                currentState.metadata().x2(),
+                clusterChangedEvent.source(),
+                clusterChangedEvent.taskInputs().updateTasks,
+                lostTimeMillis
+            );
+            return;
+        }
+
+        Priority priority = Priority.URGENT;
+        TimeValue timeout = TimeValue.timeValueMillis(remainingTimeMillis);
+        Map<Object, ClusterStateTaskListener> map = clusterChangedEvent.taskInputs().updateTasksToMap(priority, lostTimeMillis);
+        logger.warn(
+            "metadata={} => resubmit delayed update source={} tasks={} priority={} remaing timeout={}",
+            currentState.metadata().x2(),
+            clusterChangedEvent.source(),
+            clusterChangedEvent.taskInputs().updateTasks,
+            priority,
+            timeout
+        );
+        clusterService.submitStateUpdateTasks(
+            clusterChangedEvent.source(),
+            map,
+            ClusterStateTaskConfig.build(priority, timeout),
+            clusterChangedEvent.taskInputs().executor
+        );
+    }
+
+    private boolean metadataChangedSince(Metadata currentMetaData, Metadata baselineMetaData) {
+        return currentMetaData.version() != baselineMetaData.version()
+            || currentMetaData.clusterUUID().equals(baselineMetaData.clusterUUID()) == false;
     }
 
     // receive ack from remote nodes when cluster state applied.

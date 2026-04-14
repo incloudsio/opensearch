@@ -338,6 +338,11 @@ public class MetadataCreateIndexService {
                 }
 
                 @Override
+                public org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate schemaUpdate() {
+                    return org.opensearch.cluster.ClusterStateTaskConfig.SchemaUpdate.UPDATE;
+                }
+
+                @Override
                 public ClusterState execute(ClusterState currentState) throws Exception {
                     return applyCreateIndexRequest(currentState, request, false);
                 }

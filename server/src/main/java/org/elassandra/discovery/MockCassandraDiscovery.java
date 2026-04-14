@@ -63,6 +63,7 @@ public class MockCassandraDiscovery extends CassandraDiscovery {
     protected void resubmitTaskOnNextChange(final ClusterChangedEvent clusterChangedEvent) {
         if (resumitFunc != null) {
             this.resumitFunc.accept(clusterChangedEvent);
+            return;
         }
         super.resubmitTaskOnNextChange(clusterChangedEvent);
     }

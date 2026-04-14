@@ -64,6 +64,7 @@ public class TypeParsers {
     public static final String CQL_MANDATORY = "cql_mandatory";
     public static final String CQL_COLLECTION = "cql_collection";
     public static final String CQL_STRUCT = "cql_struct";
+    public static final String CQL_TYPE = "cql_type";
     public static final String CQL_UDT_NAME = "cql_udt_name";
     public static final String CQL_PARTITION_KEY = "cql_partition_key";
     public static final String CQL_STATIC_COLUMN = "cql_static_column";
@@ -78,6 +79,26 @@ public class TypeParsers {
              */
             throw new MapperParsingException("[" + propName + "] must not have a [null] value");
         }
+    }
+
+    private static boolean isElassandraCqlField(String propName) {
+        return CQL_MANDATORY.equals(propName)
+            || CQL_COLLECTION.equals(propName)
+            || CQL_STRUCT.equals(propName)
+            || CQL_TYPE.equals(propName)
+            || CQL_UDT_NAME.equals(propName)
+            || CQL_PARTITION_KEY.equals(propName)
+            || CQL_STATIC_COLUMN.equals(propName)
+            || CQL_CLUSTERING_KEY_DESC.equals(propName)
+            || CQL_PRIMARY_KEY_ORDER.equals(propName);
+    }
+
+    private static boolean parseElassandraCqlField(Iterator<Map.Entry<String, Object>> iterator, String propName) {
+        if (isElassandraCqlField(propName)) {
+            iterator.remove();
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -190,6 +211,8 @@ public class TypeParsers {
                     builder.copyTo(cpBuilder.build());
                 }
                 iterator.remove();
+            } else if (parseElassandraCqlField(iterator, propName)) {
+                // Elassandra-specific mapping metadata is consumed by forked schema logic, not stock OpenSearch builders.
             }
         }
     }
