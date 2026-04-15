@@ -487,13 +487,25 @@ public abstract class MappedFieldType {
         return textSearchInfo;
     }
 
-    /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car stub). */
+    /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car shim). */
     public Object cqlValue(Object value) {
-        return cqlValue(value, null);
+        return value;
     }
 
-    /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car stub). */
+    /** Elassandra: encode value for Cassandra decomposition (fork parity; side-car shim). */
     public Object cqlValue(Object value, org.apache.cassandra.db.marshal.AbstractType<?> type) {
+        if (value == null) {
+            return null;
+        }
+        if (type instanceof org.apache.cassandra.db.marshal.BytesType) {
+            if (value instanceof org.opensearch.common.bytes.BytesReference) {
+                return java.nio.ByteBuffer.wrap(org.opensearch.common.bytes.BytesReference.toBytes((org.opensearch.common.bytes.BytesReference) value));
+            }
+            if (value instanceof org.apache.lucene.util.BytesRef) {
+                org.apache.lucene.util.BytesRef bytesRef = (org.apache.lucene.util.BytesRef) value;
+                return java.nio.ByteBuffer.wrap(bytesRef.bytes, bytesRef.offset, bytesRef.length);
+            }
+        }
         return value;
     }
 }

@@ -91,6 +91,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -1055,18 +1056,14 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             if (clusterChangedEvent.schemaUpdate().updated()) {
                 // update and broadcast the metadata through a CQL schema update + ack from participant nodes
                 if (localNode().getId().equals(newClusterState.metadata().clusterUUID())) {
-                    publishAsCoordinator(clusterChangedEvent, ackListener);
+                    publishAsCoordinator(clusterChangedEvent, ackListener, startTimeNS);
                 } else {
-                    publishAsParticipator(clusterChangedEvent, ackListener);
+                    publishAsParticipator(clusterChangedEvent, ackListener, startTimeNS);
                 }
             } else {
                 // publish local cluster state update (for blocks, nodes or routing update)
-                publishLocalUpdate(clusterChangedEvent, ackListener);
+                publishLocalUpdate(clusterChangedEvent, ackListener, startTimeNS);
             }
-            // Elasticsearch master ack handling waits for an explicit commit signal in addition to node acks.
-            // Without this, acked cluster-state tasks can complete locally yet leave their client futures hanging
-            // until a separate client-side timeout fires.
-            ackListener.onCommit(TimeValue.timeValueNanos(System.nanoTime() - startTimeNS));
             publishListener.onResponse(null);
         } catch (Exception e) {
             TimeValue executionTime = TimeValue.timeValueMillis(Math.max(0, TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)));
@@ -1084,7 +1081,8 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
      * Publish the new metadata through a CQL schema update (a blocking schema update unless we update a CQL map as a dynamic nested object),
      * and wait acks (AckClusterStatePublishResponseHandler) from participant nodes with state alive+NORMAL.
      */
-    void publishAsCoordinator(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) throws InterruptedException, IOException {
+    void publishAsCoordinator(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener, final long startTimeNS)
+        throws InterruptedException, IOException {
         logger.debug("Coordinator update source={} metadata={}", clusterChangedEvent.source(), clusterChangedEvent.state().metadata().x2());
 
         ClusterState previousClusterState = clusterChangedEvent.previousState();
@@ -1119,6 +1117,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 newClusterState.metadata().x2()
             );
             clusterService.commitMetaData(previousClusterState.metadata(), newClusterState.metadata(), clusterChangedEvent.source());
+            notifyCommit(ackListener, startTimeNS);
 
             // compute alive node for awaiting applied acknowledgment
             long publishingStartInNanos = System.nanoTime();
@@ -1141,7 +1140,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
 
                 // build routing table when keyspaces are created locally
                 newClusterState = ClusterState.builder(newClusterState)
-                        .routingTable(RoutingTable.build(this.clusterService, newClusterState))
+                        .routingTable(buildRoutingTableWithRetry(newClusterState))
                         .build();
                 logger.debug("CQL source={} SchemaChanges={}", clusterChangedEvent.source(), events);
             }
@@ -1190,11 +1189,41 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             }
 
         } catch (ConcurrentMetaDataUpdateException e) {
-            // should replay the task later when current cluster state will match the expected metadata uuid and version
-            logger.warn("PAXOS concurrent update, source={} metadata={}, resubmit task on next metadata change",
-                    clusterChangedEvent.source(), newClusterState.metadata().x2());
+            UUID owner = clusterService.readMetaDataOwner(newClusterState.metadata().version());
+            notifyCommit(ackListener, startTimeNS);
             ackListener.onNodeAck(localNode, null);
-            resubmitTaskOnNextChange(clusterChangedEvent);
+            try {
+                final Metadata committedMetaData = clusterService.loadGlobalState();
+                if (metadataUpdateSatisfied(previousClusterState.metadata(), newClusterState.metadata(), committedMetaData)) {
+                    logger.warn(
+                        "PAXOS concurrent update, source={} metadata={}, owner={}, committed metadata already satisfies requested update; reloading committed metadata",
+                        clusterChangedEvent.source(),
+                        newClusterState.metadata().x2(),
+                        owner
+                    );
+                    reloadCommittedMetadata(clusterChangedEvent.source(), committedMetaData);
+                } else {
+                    // Refresh the local cluster state from Cassandra first so the delayed task can replay
+                    // against the winning metadata instead of waiting forever for an unrelated later change.
+                    logger.warn(
+                        "PAXOS concurrent update, source={} metadata={}, owner={}, reloading committed metadata and resubmitting task on next metadata change",
+                        clusterChangedEvent.source(),
+                        newClusterState.metadata().x2(),
+                        owner
+                    );
+                    resubmitTaskOnNextChange(clusterChangedEvent);
+                    reloadCommittedMetadata(clusterChangedEvent.source(), committedMetaData);
+                }
+            } catch (Exception reloadFailure) {
+                logger.warn(
+                    "PAXOS concurrent update, source={} metadata={}, owner={}, failed to inspect committed metadata; resubmit task on next metadata change",
+                    clusterChangedEvent.source(),
+                    newClusterState.metadata().x2(),
+                    owner,
+                    reloadFailure
+                );
+                resubmitTaskOnNextChange(clusterChangedEvent);
+            }
             return;
         } catch(UnavailableException e) {
             logger.error("PAXOS not enough available nodes, source={} metadata={}",
@@ -1214,6 +1243,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             }
 
             logger.warn("PAXOS timeout but succesfully write x2={}", newClusterState.metadata().x2());
+            notifyCommit(ackListener, startTimeNS);
             ackListener.onNodeAck(localNode, e);
         } finally {
             handlerRef.set(null);
@@ -1223,7 +1253,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     /**
      * Publish the new metadata and notify the coordinator through an appliedClusterStateAction.
      */
-    void publishAsParticipator(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) {
+    void publishAsParticipator(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener, final long startTimeNS) {
         ClusterState newClusterState = clusterChangedEvent.state();
         String reason = clusterChangedEvent.source();
 
@@ -1239,6 +1269,7 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
             return;
         }
 
+        notifyCommit(ackListener, startTimeNS);
         final AtomicBoolean processedOrFailed = new AtomicBoolean();
         this.pendingStatesQueue.addPending(newClusterState,  new PendingClusterStatesQueue.StateProcessedListener() {
             @Override
@@ -1274,9 +1305,10 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
     /**
      * Publish a local cluster state update (no coordination) coming from a CQL schema update.
      */
-    void publishLocalUpdate(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener) {
+    void publishLocalUpdate(final ClusterChangedEvent clusterChangedEvent, final AckListener ackListener, final long startTimeNS) {
         ClusterState newClusterState = rebaseLocalClusterState(clusterChangedEvent);
         logger.debug("Local update source={} metadata={}", clusterChangedEvent.source(), newClusterState.metadata().x2());
+        notifyCommit(ackListener, startTimeNS);
         final AtomicBoolean processedOrFailed = new AtomicBoolean();
         pendingStatesQueue.addPending(newClusterState,
             new PendingClusterStatesQueue.StateProcessedListener() {
@@ -1311,6 +1343,11 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
                 return;
             }
         }
+    }
+
+    private void notifyCommit(AckListener ackListener, long startTimeNS) {
+        // OpenSearch expects the commit signal before any subsequent node acks for the same update.
+        ackListener.onCommit(TimeValue.timeValueNanos(System.nanoTime() - startTimeNS));
     }
 
     private ClusterState rebaseLocalClusterState(ClusterChangedEvent clusterChangedEvent) {
@@ -1424,9 +1461,121 @@ public class CassandraDiscovery extends AbstractLifecycleComponent implements Di
         );
     }
 
+    private void reloadCommittedMetadata(String source) {
+        try {
+            reloadCommittedMetadata(source, clusterService.loadGlobalState());
+        } catch (Exception e) {
+            logger.error("failed to reload committed metadata after [{}]", source, e);
+        }
+    }
+
+    private void reloadCommittedMetadata(String source, Metadata reloadedMetaData) {
+        clusterService.submitStateUpdateTask("reload-committed-metadata-after-concurrent-update", new ClusterStateUpdateTask() {
+            @Override
+            public ClusterState execute(ClusterState currentState) {
+                if (reloadedMetaData.version() < currentState.metadata().version()) {
+                    logger.warn(
+                        "skip stale committed metadata reload after [{}], committed metadata={} current metadata={}",
+                        source,
+                        reloadedMetaData.x2(),
+                        currentState.metadata().x2()
+                    );
+                    return currentState;
+                }
+                ClusterState updatedState = ClusterState.builder(currentState)
+                    .metadata(Metadata.builder(reloadedMetaData))
+                    .build();
+                try {
+                    return ClusterState.builder(updatedState)
+                        .routingTable(buildRoutingTableWithRetry(updatedState))
+                        .build();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new OpenSearchException(e);
+                }
+            }
+
+            @Override
+            public void onFailure(String taskSource, Exception t) {
+                logger.error("unexpected failure during [{}] triggered by [{}]", t, taskSource, source);
+            }
+        });
+    }
+
+    private boolean metadataUpdateSatisfied(Metadata previousMetaData, Metadata expectedMetaData, Metadata actualMetaData) {
+        if (Metadata.isGlobalStateEquals(previousMetaData, expectedMetaData) == false
+            && Metadata.isGlobalStateEquals(expectedMetaData, actualMetaData) == false) {
+            return false;
+        }
+
+        Set<String> changedIndices = new HashSet<>();
+        previousMetaData.indices().keysIt().forEachRemaining(changedIndices::add);
+        expectedMetaData.indices().keysIt().forEachRemaining(changedIndices::add);
+        for (String index : changedIndices) {
+            IndexMetadata previousIndexMetaData = previousMetaData.index(index);
+            IndexMetadata expectedIndexMetaData = expectedMetaData.index(index);
+            if (Objects.equals(previousIndexMetaData, expectedIndexMetaData)) {
+                continue;
+            }
+            if (Objects.equals(expectedIndexMetaData, actualMetaData.index(index)) == false) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private boolean metadataChangedSince(Metadata currentMetaData, Metadata baselineMetaData) {
         return currentMetaData.version() != baselineMetaData.version()
             || currentMetaData.clusterUUID().equals(baselineMetaData.clusterUUID()) == false;
+    }
+
+    private RoutingTable buildRoutingTableWithRetry(ClusterState clusterState) throws InterruptedException {
+        final int expectedIndices = expectedRoutableIndexCount(clusterState);
+        final long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        RoutingTable routingTable = RoutingTable.EMPTY_ROUTING_TABLE;
+        RuntimeException lastFailure = null;
+        while (System.nanoTime() < deadlineNanos) {
+            try {
+                routingTable = RoutingTable.build(clusterService, clusterState);
+                lastFailure = null;
+                if (routingTable.indicesRouting().size() >= expectedIndices) {
+                    return routingTable;
+                }
+            } catch (RuntimeException e) {
+                lastFailure = e;
+            }
+            Thread.sleep(50L);
+        }
+
+        if (lastFailure != null) {
+            logger.warn(
+                "routing table build failed after schema update retries, metadata={} expectedIndices={}",
+                clusterState.metadata().x2(),
+                expectedIndices,
+                lastFailure
+            );
+            throw lastFailure;
+        }
+
+        if (routingTable.indicesRouting().size() < expectedIndices) {
+            logger.warn(
+                "routing table still incomplete after schema update, metadata={} expectedIndices={} actualIndices={}",
+                clusterState.metadata().x2(),
+                expectedIndices,
+                routingTable.indicesRouting().size()
+            );
+        }
+        return routingTable;
+    }
+
+    private int expectedRoutableIndexCount(ClusterState clusterState) {
+        int expectedIndices = 0;
+        for (IndexMetadata indexMetaData : clusterState.metadata()) {
+            if (indexMetaData.getState() == IndexMetadata.State.OPEN) {
+                expectedIndices++;
+            }
+        }
+        return expectedIndices;
     }
 
     // receive ack from remote nodes when cluster state applied.

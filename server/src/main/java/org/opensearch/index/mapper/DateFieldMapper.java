@@ -568,12 +568,45 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         public Object valueForDisplay(Object value) {
-            Long val = (Long) value;
-            if (val == null) {
+            if (value == null) {
                 return null;
             }
-            return dateTimeFormatter().format(resolution.toInstant(val).atZone(ZoneOffset.UTC));
+            if (value instanceof java.util.Date) {
+                return dateTimeFormatter().format(((java.util.Date) value).toInstant().atZone(ZoneOffset.UTC));
+            }
+            if (value instanceof Long) {
+                Long val = (Long) value;
+                return dateTimeFormatter().format(resolution.toInstant(val).atZone(ZoneOffset.UTC));
+            }
+            return value;
         }
+
+        @Override
+        public Object cqlValue(Object value, org.apache.cassandra.db.marshal.AbstractType<?> atype) {
+            Object val = cqlValue(value);
+            if (val instanceof java.util.Date && atype instanceof org.apache.cassandra.db.marshal.SimpleDateType) {
+                return org.apache.cassandra.serializers.SimpleDateSerializer.timeInMillisToDay(((java.util.Date) val).getTime());
+            }
+            return val;
+        }
+
+        @Override
+        public Object cqlValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof java.util.Date) {
+                return value;
+            }
+            if (value instanceof Number) {
+                return new java.util.Date(((Number) value).longValue());
+            }
+            if (value instanceof org.apache.lucene.util.BytesRef) {
+                return new java.util.Date(org.opensearch.common.Numbers.bytesToLong((org.apache.lucene.util.BytesRef) value));
+            }
+            return java.util.Date.from(resolution.toInstant(parse(value.toString())));
+        }
+
 
         @Override
         public DocValueFormat docValueFormat(@Nullable String format, ZoneId timeZone) {
@@ -654,10 +687,134 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
             Object dateAsObject = context.externalValue();
             if (dateAsObject == null) {
                 dateAsString = null;
+            } else if (dateAsObject instanceof java.util.Date) {
+                dateAsString = Long.toString(((java.util.Date) dateAsObject).getTime());
+            } else if (dateAsObject instanceof Number) {
+                dateAsString = dateAsObject.toString();
+            } else if (dateAsObject instanceof org.apache.lucene.util.BytesRef) {
+                dateAsString = Long.toString(org.opensearch.common.Numbers.bytesToLong((org.apache.lucene.util.BytesRef) dateAsObject));
             } else {
                 dateAsString = dateAsObject.toString();
             }
         } else {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             dateAsString = context.parser().textOrNull();
         }
 

@@ -657,11 +657,13 @@ public class SchemaManager {
                 continue; // ignore pseudo column known by Elasticsearch
 
             ColumnDescriptor colDesc = new ColumnDescriptor(column);
-            FieldMapper fieldMapper = docMapper.mappers().smartNameFieldMapper(column);
+            FieldMapper fieldMapper = SourceFieldMapper.NAME.equals(column)
+                    ? docMapper.sourceMapper()
+                    : docMapper.mappers().smartNameFieldMapper(column);
             ColumnMetadata cdef = (newTable) ? null : cfm.getColumn(new ColumnIdentifier(column, true));
 
             if (fieldMapper != null) {
-                if (fieldMapper.cqlCollection().equals(CqlCollection.NONE))
+                if (fieldMapper.cqlCollection().equals(CqlCollection.NONE) && (fieldMapper instanceof SourceFieldMapper) == false)
                     continue; // ignore field.
 
                 if (fieldMapper instanceof RangeFieldMapper) {

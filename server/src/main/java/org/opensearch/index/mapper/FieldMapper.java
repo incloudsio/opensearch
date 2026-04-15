@@ -195,8 +195,85 @@ public abstract class FieldMapper extends Mapper implements Cloneable, CqlMapper
 
         /** Set metadata on this field. */
         public T meta(Map<String, String> meta) {
-            this.meta = meta;
+            if (this.meta.isEmpty()) {
+                this.meta = meta;
+            } else {
+                Map<String, String> merged = new HashMap<>(this.meta);
+                merged.putAll(meta);
+                this.meta = merged;
+            }
             return (T) this;
+        }
+
+        /** Elassandra CQL builder metadata helpers. */
+        private void putElassandraCqlMeta(String key, String value) {
+            if (this.meta.isEmpty()) {
+                this.meta = new HashMap<>();
+            } else if ((this.meta instanceof HashMap) == false) {
+                this.meta = new HashMap<>(this.meta);
+            }
+            this.meta.put(key, value);
+        }
+
+        public T cqlCollection(CqlMapper.CqlCollection cqlCollection) {
+            putElassandraCqlMeta(TypeParsers.CQL_COLLECTION, cqlCollection.name().toLowerCase(java.util.Locale.ROOT));
+            return builder;
+        }
+
+        public T cqlStruct(CqlMapper.CqlStruct cqlStruct) {
+            putElassandraCqlMeta(TypeParsers.CQL_STRUCT, cqlStruct.name().toLowerCase(java.util.Locale.ROOT));
+            return builder;
+        }
+
+        public T cqlType(String cqlType) {
+            putElassandraCqlMeta(TypeParsers.CQL_TYPE, cqlType);
+            return builder;
+        }
+
+        public T cqlPartialUpdate(boolean cqlPartialUpdate) {
+            putElassandraCqlMeta(TypeParsers.CQL_MANDATORY, Boolean.toString(cqlPartialUpdate));
+            return builder;
+        }
+
+        public T cqlPartitionKey(boolean cqlPartitionKey) {
+            putElassandraCqlMeta(TypeParsers.CQL_PARTITION_KEY, Boolean.toString(cqlPartitionKey));
+            return builder;
+        }
+
+        public T cqlStaticColumn(boolean cqlStaticColumn) {
+            putElassandraCqlMeta(TypeParsers.CQL_STATIC_COLUMN, Boolean.toString(cqlStaticColumn));
+            return builder;
+        }
+
+        public T cqlPrimaryKeyOrder(int cqlPrimaryKeyOrder) {
+            putElassandraCqlMeta(TypeParsers.CQL_PRIMARY_KEY_ORDER, Integer.toString(cqlPrimaryKeyOrder));
+            return builder;
+        }
+
+        public T cqlClusteringKeyDesc(boolean cqlClusteringKeyDesc) {
+            putElassandraCqlMeta(TypeParsers.CQL_CLUSTERING_KEY_DESC, Boolean.toString(cqlClusteringKeyDesc));
+            return builder;
+        }
+
+        public void cqlCheck() {
+            if (Boolean.parseBoolean(this.meta.getOrDefault(TypeParsers.CQL_PARTITION_KEY, "false"))
+                && Integer.parseInt(this.meta.getOrDefault(TypeParsers.CQL_PRIMARY_KEY_ORDER, "-1")) < 0) {
+                throw new MapperParsingException(
+                    "Partition key [" + name + "] has no primary key order, please set " + TypeParsers.CQL_PRIMARY_KEY_ORDER + "."
+                );
+            }
+            if (Boolean.parseBoolean(this.meta.getOrDefault(TypeParsers.CQL_STATIC_COLUMN, "false"))
+                && (Integer.parseInt(this.meta.getOrDefault(TypeParsers.CQL_PRIMARY_KEY_ORDER, "-1")) > 0
+                    || Boolean.parseBoolean(this.meta.getOrDefault(TypeParsers.CQL_PARTITION_KEY, "false")))) {
+                throw new MapperParsingException("Static column [" + name + "] cannot be part of the primary key.");
+            }
+            if (Boolean.parseBoolean(this.meta.getOrDefault(TypeParsers.CQL_CLUSTERING_KEY_DESC, "false"))
+                && (Boolean.parseBoolean(this.meta.getOrDefault(TypeParsers.CQL_PARTITION_KEY, "false"))
+                    || Integer.parseInt(this.meta.getOrDefault(TypeParsers.CQL_PRIMARY_KEY_ORDER, "-1")) < 0)) {
+                throw new MapperParsingException(
+                    "Clustering column [" + name + "] cannot be part of the partition key and should have a primary key order."
+                );
+            }
         }
     }
 
@@ -319,7 +396,12 @@ public abstract class FieldMapper extends Mapper implements Cloneable, CqlMapper
      * Elassandra: createField for secondary index / CQL document materialization (fork parity).
      */
     public void createField(ParseContext context, Object value, Optional<String> keyName) throws IOException {
-        multiFields.create(this, context, value);
+        if (this instanceof MetadataFieldMapper) {
+            return;
+        }
+        ParseContext externalContext = context.createExternalValueContext(value);
+        parseCreateField(externalContext);
+        multiFields.parse(this, externalContext);
     }
 
     @Override
@@ -764,9 +846,156 @@ public abstract class FieldMapper extends Mapper implements Cloneable, CqlMapper
         }
     }
 
-    /** Elassandra CQL column type for leaf fields (fork parity; side-car stub). */
+    /** Elassandra CQL metadata helpers. */
+    private String elassandraCqlMeta(String key) {
+        java.util.Map<String, String> meta = fieldType().meta();
+        return meta == null ? null : meta.get(key);
+    }
+
+    private boolean elassandraCqlBoolean(String key, boolean defaultValue) {
+        String value = elassandraCqlMeta(key);
+        return value == null ? defaultValue : Boolean.parseBoolean(value);
+    }
+
+    private int elassandraCqlInt(String key, int defaultValue) {
+        String value = elassandraCqlMeta(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static org.apache.cassandra.cql3.CQL3Type.Raw defaultRawType(String typeName) {
+        switch (typeName) {
+            case "keyword":
+            case "text":
+            case "completion":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.TEXT);
+            case "integer":
+            case "token_count":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.INT);
+            case "long":
+            case "unsigned_long":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.BIGINT);
+            case "short":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.SMALLINT);
+            case "byte":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.TINYINT);
+            case "double":
+            case "scaled_float":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.DOUBLE);
+            case "float":
+            case "half_float":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.FLOAT);
+            case "boolean":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.BOOLEAN);
+            case "date":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.TIMESTAMP);
+            case "binary":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.BLOB);
+            case "ip":
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.INET);
+            default:
+                return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.TEXT);
+        }
+    }
+
+    private org.apache.cassandra.cql3.CQL3Type.Raw configuredRawType() {
+        String value = elassandraCqlMeta(TypeParsers.CQL_TYPE);
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return org.apache.cassandra.cql3.CQLFragmentParser.parseAny(
+                org.apache.cassandra.cql3.CqlParser::comparatorType,
+                value,
+                "CQL type"
+            );
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public CqlMapper.CqlCollection cqlCollection() {
+        String value = elassandraCqlMeta(TypeParsers.CQL_COLLECTION);
+        if (value == null) {
+            return name().startsWith("_") ? CqlMapper.CqlCollection.NONE : CqlMapper.CqlCollection.LIST;
+        }
+        switch (value.toLowerCase(java.util.Locale.ROOT)) {
+            case "list":
+                return CqlMapper.CqlCollection.LIST;
+            case "set":
+                return CqlMapper.CqlCollection.SET;
+            case "singleton":
+                return CqlMapper.CqlCollection.SINGLETON;
+            default:
+                return CqlMapper.CqlCollection.NONE;
+        }
+    }
+
+    @Override
+    public String cqlCollectionTag() {
+        switch (cqlCollection()) {
+            case LIST:
+                return "list";
+            case SET:
+                return "set";
+            default:
+                return "";
+        }
+    }
+
+    @Override
+    public CqlMapper.CqlStruct cqlStruct() {
+        String value = elassandraCqlMeta(TypeParsers.CQL_STRUCT);
+        if (value == null) {
+            return CqlMapper.CqlStruct.UDT;
+        }
+        switch (value.toLowerCase(java.util.Locale.ROOT)) {
+            case "map":
+                return CqlMapper.CqlStruct.MAP;
+            case "opaque_map":
+                return CqlMapper.CqlStruct.OPAQUE_MAP;
+            case "tuple":
+                return CqlMapper.CqlStruct.TUPLE;
+            default:
+                return CqlMapper.CqlStruct.UDT;
+        }
+    }
+
+    @Override
+    public boolean cqlPartialUpdate() {
+        return elassandraCqlBoolean(TypeParsers.CQL_MANDATORY, false);
+    }
+
+    @Override
+    public boolean cqlPartitionKey() {
+        return elassandraCqlBoolean(TypeParsers.CQL_PARTITION_KEY, false);
+    }
+
+    @Override
+    public boolean cqlStaticColumn() {
+        return elassandraCqlBoolean(TypeParsers.CQL_STATIC_COLUMN, false);
+    }
+
+    @Override
+    public int cqlPrimaryKeyOrder() {
+        return elassandraCqlInt(TypeParsers.CQL_PRIMARY_KEY_ORDER, -1);
+    }
+
+    @Override
+    public boolean cqlClusteringKeyDesc() {
+        return elassandraCqlBoolean(TypeParsers.CQL_CLUSTERING_KEY_DESC, false);
+    }
+
     public org.apache.cassandra.cql3.CQL3Type.Raw rawType() {
-        return org.apache.cassandra.cql3.CQL3Type.Raw.from(org.apache.cassandra.cql3.CQL3Type.Native.TEXT);
+        org.apache.cassandra.cql3.CQL3Type.Raw configured = configuredRawType();
+        return configured != null ? configured : defaultRawType(typeName());
     }
 
 }

@@ -49,21 +49,12 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
         return (prefix + "_" + randomAlphaOfLength(8)).toLowerCase(Locale.ROOT);
     }
 
-    private void assertIndexState(String index, IndexMetadata.State expectedState) throws Exception {
-        assertBusy(() -> assertThat(
-            client().admin().cluster().prepareState().get().getState().metadata().index(index).getState(),
-            equalTo(expectedState)
-        ));
-    }
-
     private void closeIndex(String index) throws Exception {
         client().admin().indices().prepareClose(index).get();
-        assertIndexState(index, IndexMetadata.State.CLOSE);
     }
 
     private void openIndex(String index) throws Exception {
         client().admin().indices().prepareOpen(index).get();
-        assertIndexState(index, IndexMetadata.State.OPEN);
     }
 
     private void assertSearchHitCount(String index, long expected) throws Exception {

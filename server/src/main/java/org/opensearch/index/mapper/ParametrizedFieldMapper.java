@@ -572,6 +572,7 @@ public abstract class ParametrizedFieldMapper extends FieldMapper {
 
         protected final MultiFields.Builder multiFieldsBuilder = new MultiFields.Builder();
         protected final CopyTo.Builder copyTo = new CopyTo.Builder();
+        protected final Map<String, String> elassandraCqlMetadata = new HashMap<>();
 
         /**
          * Creates a new Builder with a field name
@@ -677,6 +678,7 @@ public abstract class ParametrizedFieldMapper extends FieldMapper {
                     parameter = paramsMap.get(propName);
                 }
                 if (parameter == null && propName.startsWith("cql_")) {
+                    elassandraCqlMetadata.put(propName, String.valueOf(propNode));
                     iterator.remove();
                     continue;
                 }
@@ -709,6 +711,16 @@ public abstract class ParametrizedFieldMapper extends FieldMapper {
                 }
                 parameter.parse(name, parserContext, propNode);
                 iterator.remove();
+            }
+            if (elassandraCqlMetadata.isEmpty() == false) {
+                Parameter<?> metaParameter = paramsMap.get("meta");
+                if (metaParameter instanceof Parameter<?>) {
+                    @SuppressWarnings("unchecked")
+                    Parameter<Map<String, String>> typedMeta = (Parameter<Map<String, String>>) metaParameter;
+                    Map<String, String> mergedMeta = new HashMap<>(typedMeta.getValue());
+                    mergedMeta.putAll(elassandraCqlMetadata);
+                    typedMeta.setValue(mergedMeta);
+                }
             }
             validate();
         }

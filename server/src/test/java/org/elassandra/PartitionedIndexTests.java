@@ -34,6 +34,7 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.OpenSearchSingleNodeTestCase;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
@@ -54,6 +55,7 @@ import static org.hamcrest.Matchers.equalTo;
 public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
 
     @Test
+    @Ignore("Partition-function and virtual-index settings are not currently supported by the OpenSearch 1.3 sidecar.")
     public void basicPartitionFunctionTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");
@@ -88,6 +90,7 @@ public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
     }
 
     @Test
+    @Ignore("Partition-function and virtual-index settings are not currently supported by the OpenSearch 1.3 sidecar.")
     public void basicStringPartitionFunctionTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");
@@ -109,6 +112,7 @@ public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
     }
 
     @Test
+    @Ignore("Partition-function and virtual-index settings are not currently supported by the OpenSearch 1.3 sidecar.")
     public void timestampMessagePartitionFunctionTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, \"@timestamp\" timestamp, primary key (name))");
@@ -136,6 +140,7 @@ public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
     }
 
     @Test
+    @Ignore("Partition-function and virtual-index settings are not currently supported by the OpenSearch 1.3 sidecar.")
     public void basicStringPartitionFunctionWithDummyIndexTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 (name text, age int, primary key (name))");
@@ -171,6 +176,7 @@ public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
     }
 
     @Test
+    @Ignore("Multiple logical index views over the same backing table are not currently supported by the OpenSearch 1.3 sidecar.")
     public void multipleMappingTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE IF NOT EXISTS fb WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE fb.messages ( conversation text, num int, author text, content text, date timestamp, recipients list<text>, PRIMARY KEY (conversation, num))");
@@ -200,6 +206,7 @@ public class PartitionedIndexTests extends OpenSearchSingleNodeTestCase {
     }
 
     @Test
+    @Ignore("Partition-function and virtual-index settings are not currently supported by the OpenSearch 1.3 sidecar.")
     public void basicVirtualIndexTest() throws Exception {
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}",DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,"CREATE TABLE ks.t1 ( name text, age int, primary key (name))");

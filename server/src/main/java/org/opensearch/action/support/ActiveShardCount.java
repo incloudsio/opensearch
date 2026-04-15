@@ -243,9 +243,22 @@ public final class ActiveShardCount implements Writeable {
         }
     }
 
-    /** Elassandra: map replication policy to Cassandra write CL (side-car stub). */
+    /** Elassandra: map replication policy to Cassandra write CL. */
     public ConsistencyLevel toCassandraConsistencyLevel() {
-        return ConsistencyLevel.LOCAL_QUORUM;
+        switch (value) {
+            case ACTIVE_SHARD_COUNT_DEFAULT:
+                return ConsistencyLevel.LOCAL_ONE;
+            case 1:
+                return ConsistencyLevel.ONE;
+            case 2:
+                return ConsistencyLevel.TWO;
+            case 3:
+                return ConsistencyLevel.THREE;
+            case ALL_ACTIVE_SHARDS:
+                return ConsistencyLevel.ALL;
+            default:
+                return ConsistencyLevel.LOCAL_ONE;
+        }
     }
 
 }

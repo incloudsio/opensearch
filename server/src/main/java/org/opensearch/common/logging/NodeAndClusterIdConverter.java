@@ -69,7 +69,15 @@ public final class NodeAndClusterIdConverter extends LogEventPatternConverter {
      * @param clusterUUID a clusterId received from cluster state update
      */
     public static void setNodeIdAndClusterId(String nodeId, String clusterUUID) {
-        nodeAndClusterId.set(formatIds(clusterUUID, nodeId));
+        final String formatted = formatIds(clusterUUID, nodeId);
+        if (nodeAndClusterId.get() != null) {
+            return;
+        }
+        try {
+            nodeAndClusterId.set(formatted);
+        } catch (SetOnce.AlreadySetException ignored) {
+            // Embedded Elassandra tests restart nodes in the same JVM; keep the first values.
+        }
     }
 
     /**

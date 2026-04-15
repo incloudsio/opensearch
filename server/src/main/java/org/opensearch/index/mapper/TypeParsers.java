@@ -93,12 +93,62 @@ public class TypeParsers {
             || CQL_PRIMARY_KEY_ORDER.equals(propName);
     }
 
-    private static boolean parseElassandraCqlField(Iterator<Map.Entry<String, Object>> iterator, String propName) {
-        if (isElassandraCqlField(propName)) {
-            iterator.remove();
-            return true;
+    private static boolean parseElassandraCqlField(
+        FieldMapper.Builder<?> builder,
+        Iterator<Map.Entry<String, Object>> iterator,
+        String propName,
+        Object propNode
+    ) {
+        if (isElassandraCqlField(propName) == false) {
+            return false;
         }
-        return false;
+        if (CQL_MANDATORY.equals(propName)) {
+            builder.cqlPartialUpdate(XContentMapValues.nodeBooleanValue(propNode, propName));
+        } else if (CQL_COLLECTION.equals(propName)) {
+            String value = propNode.toString().toLowerCase(java.util.Locale.ROOT);
+            switch (value) {
+                case "list":
+                    builder.cqlCollection(CqlMapper.CqlCollection.LIST);
+                    break;
+                case "set":
+                    builder.cqlCollection(CqlMapper.CqlCollection.SET);
+                    break;
+                case "singleton":
+                    builder.cqlCollection(CqlMapper.CqlCollection.SINGLETON);
+                    break;
+                default:
+                    builder.cqlCollection(CqlMapper.CqlCollection.NONE);
+                    break;
+            }
+        } else if (CQL_STRUCT.equals(propName)) {
+            String value = propNode.toString().toLowerCase(java.util.Locale.ROOT);
+            switch (value) {
+                case "map":
+                    builder.cqlStruct(CqlMapper.CqlStruct.MAP);
+                    break;
+                case "opaque_map":
+                    builder.cqlStruct(CqlMapper.CqlStruct.OPAQUE_MAP);
+                    break;
+                case "tuple":
+                    builder.cqlStruct(CqlMapper.CqlStruct.TUPLE);
+                    break;
+                default:
+                    builder.cqlStruct(CqlMapper.CqlStruct.UDT);
+                    break;
+            }
+        } else if (CQL_TYPE.equals(propName)) {
+            builder.cqlType(propNode.toString());
+        } else if (CQL_PARTITION_KEY.equals(propName)) {
+            builder.cqlPartitionKey(XContentMapValues.nodeBooleanValue(propNode, propName));
+        } else if (CQL_STATIC_COLUMN.equals(propName)) {
+            builder.cqlStaticColumn(XContentMapValues.nodeBooleanValue(propNode, propName));
+        } else if (CQL_CLUSTERING_KEY_DESC.equals(propName)) {
+            builder.cqlClusteringKeyDesc(XContentMapValues.nodeBooleanValue(propNode, propName));
+        } else if (CQL_PRIMARY_KEY_ORDER.equals(propName)) {
+            builder.cqlPrimaryKeyOrder(XContentMapValues.nodeIntegerValue(propNode));
+        }
+        iterator.remove();
+        return true;
     }
 
     /**
@@ -112,15 +162,20 @@ public class TypeParsers {
         }
         @SuppressWarnings("unchecked")
         Map<String, ?> meta = (Map<String, ?>) metaObject;
-        if (meta.size() > 5) {
-            throw new MapperParsingException("[meta] can't have more than 5 entries, but got " + meta.size() + " on field [" + name + "]");
-        }
+        int userMetaEntries = 0;
         for (String key : meta.keySet()) {
+            if (isElassandraCqlField(key)) {
+                continue;
+            }
+            userMetaEntries++;
             if (key.codePointCount(0, key.length()) > 20) {
                 throw new MapperParsingException(
                     "[meta] keys can't be longer than 20 chars, but got [" + key + "] for field [" + name + "]"
                 );
             }
+        }
+        if (userMetaEntries > 5) {
+            throw new MapperParsingException("[meta] can't have more than 5 entries, but got " + userMetaEntries + " on field [" + name + "]");
         }
         for (Object value : meta.values()) {
             if (value instanceof String) {
@@ -211,8 +266,8 @@ public class TypeParsers {
                     builder.copyTo(cpBuilder.build());
                 }
                 iterator.remove();
-            } else if (parseElassandraCqlField(iterator, propName)) {
-                // Elassandra-specific mapping metadata is consumed by forked schema logic, not stock OpenSearch builders.
+            } else if (parseElassandraCqlField(builder, iterator, propName, propNode)) {
+                // Elassandra-specific mapping metadata is preserved on FieldMapper for SchemaManager / QueryManager.
             }
         }
     }

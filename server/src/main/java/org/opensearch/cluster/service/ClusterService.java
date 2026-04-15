@@ -37,6 +37,7 @@ import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.KeyspaceMetadata;
 import org.apache.cassandra.schema.Schema;
+import org.elassandra.cluster.QueryManager;
 import org.elassandra.cluster.SchemaManager;
 import org.elassandra.discovery.CassandraDiscovery;
 import org.elassandra.shard.CassandraShardStartedBarrier;
@@ -116,6 +117,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
     private volatile CassandraDiscovery cassandraDiscovery;
 
     private final SchemaManager schemaManager;
+    private final QueryManager queryManager;
 
     private final CassandraShardStartedBarrier cassandraShardStartedBarrier;
 
@@ -144,6 +146,7 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
         this.clusterSettings.addAffixUpdateConsumer(USER_DEFINED_METADATA, (first, second) -> {}, (first, second) -> {});
         this.clusterApplierService = clusterApplierService;
         this.schemaManager = new SchemaManager(settings, this);
+        this.queryManager = new QueryManager(settings, this);
         this.cassandraShardStartedBarrier = new CassandraShardStartedBarrier(settings, this);
     }
 
@@ -430,6 +433,10 @@ public static final String SETTING_CLUSTER_SEARCH_STRATEGY_CLASS = "cluster.sear
 
     public org.elassandra.cluster.SchemaManager getSchemaManager() {
         return schemaManager;
+    }
+
+    public org.elassandra.cluster.QueryManager getQueryManager() {
+        return queryManager;
     }
 
     public void writeMetadataToSchemaMutations(

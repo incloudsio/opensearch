@@ -15,7 +15,12 @@
  */
 package org.elassandra;
 
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope.Scope;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakZombies;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakZombies.Consequence;
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.query.QueryBuilders;
@@ -32,10 +37,13 @@ import static org.hamcrest.Matchers.equalTo;
  *
  */
 //gradle :server:test -Dtests.seed=65E2CF27F286CC89 -Dtests.class=org.elassandra.ExplainTests -Dtests.security.manager=false -Dtests.locale=en-PH -Dtests.timezone=America/Coral_Harbour
+@ThreadLeakScope(Scope.NONE)
+@ThreadLeakZombies(Consequence.CONTINUE)
 public class ExplainTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testExplain() throws Exception {
+        final String index = "explain_test_index";
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -51,14 +59,15 @@ public class ExplainTests extends OpenSearchSingleNodeTestCase {
                         .endObject()
                     .endObject()
                 .endObject();
-        assertAcked(client().admin().indices().prepareCreate("test").addMapping("t1", mapping));
-        ensureGreen("test");
+        assertAcked(client().admin().indices().prepareCreate(index).addMapping("t1", mapping));
+        ensureGreen(index);
 
         long N = 10;
         for(int i=0; i < N; i++)
-            process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id, f1) VALUES ('%d',%d)", i,i));
-        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("f1", 1)).get().getHits().getTotalHits().value, equalTo(1L));
-        assertThat(client().prepareExplain("test", "t1", "1").setQuery(QueryBuilders.termQuery("f1", 1)).get().hasExplanation(), equalTo(true));
+            process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO %s.t1 (id, f1) VALUES ('%d',%d)", index, i, i));
+        assertThat(client().prepareSearch().setIndices(index).setQuery(QueryBuilders.termQuery("f1", 1)).get().getHits().getTotalHits().value, equalTo(1L));
+        assertThat(client().prepareExplain(index, "t1", "1").setQuery(QueryBuilders.termQuery("f1", 1)).get().hasExplanation(), equalTo(true));
     }
+
 }
 

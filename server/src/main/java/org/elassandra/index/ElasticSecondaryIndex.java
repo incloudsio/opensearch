@@ -580,6 +580,7 @@ public class ElasticSecondaryIndex implements Index {
         private String id;
         private String parent;
         private Field version, uid;
+        private SequenceIDFields seqID;
         private final List<Document> documents = new ArrayList<Document>();
         private AllEntries allEntries = new AllEntries();
         private float docBoost = 1.0f;
@@ -612,6 +613,7 @@ public class ElasticSecondaryIndex implements Index {
             this.documents.add(this.document);
             this.id = uid.id();
             this.uid = new Field(IdFieldMapper.NAME, Uid.encodeId(uid.id()), IdFieldMapper.Defaults.FIELD_TYPE);
+            this.seqID = null;
             this.allEntries = allFieldMapperEnabledForAllEntries(this.docMapper) ? new AllEntries() : null;
             this.docBoost = 1.0f;
             this.dynamicMappers = null;
@@ -835,11 +837,12 @@ public class ElasticSecondaryIndex implements Index {
 
         @Override
         public SequenceIDFields seqID() {
-            return SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+            return this.seqID;
         }
 
         @Override
         public void seqID(SequenceIDFields seqID) {
+            this.seqID = seqID;
         }
 
         /**
@@ -2223,7 +2226,11 @@ public class ElasticSecondaryIndex implements Index {
                     context.docMapper.idFieldMapper().createField(context, uid);
                     context.docMapper.typeMapper().createField(context, typeName);
                     context.docMapper.tokenFieldMapper().createField(context, key.getToken().getTokenValue());
-                    context.docMapper.seqNoFieldMapper().createField(context, null); // add zero _seq_no
+                    SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+                    context.seqID(seqID);
+                    context.doc().add(seqID.seqNo);
+                    context.doc().add(seqID.seqNoDocValue);
+                    context.doc().add(seqID.primaryTerm);
 
                     if (indexInfo.includeNodeId)
                         context.docMapper.hostFieldMapper().createField(context, ImmutableMappingInfo.this.nodeId);
@@ -2352,7 +2359,7 @@ public class ElasticSecondaryIndex implements Index {
 
                                 final ParsedDocument parsedDoc = new ParsedDocument(
                                     context.version(),
-                                    SeqNoFieldMapper.SequenceIDFields.emptySeqID(),
+                                    context.seqID(),
                                     (isStatic()) ? partitionKey : id,
                                     context.type(),
                                     partitionKey,
@@ -2381,12 +2388,13 @@ public class ElasticSecondaryIndex implements Index {
                     if (indexShard != null) {
                         if (!indexInfo.updated)
                             indexInfo.updated = true;
+                        final long operationPrimaryTerm = indexShard.getOperationPrimaryTerm();
 
                         final Engine.Index operation = new Engine.Index(
                             termUid(indexInfo.indexService, id),
                             parsedDoc,
                             SequenceNumbers.UNASSIGNED_SEQ_NO,
-                            UNASSIGNED_PRIMARY_TERM,
+                            operationPrimaryTerm,
                             Versions.MATCH_ANY,
                             VersionType.INTERNAL,
                             Engine.Operation.Origin.PRIMARY,
@@ -2885,9 +2893,17 @@ public class ElasticSecondaryIndex implements Index {
                 return null;
 
             boolean found = (columns.size() == 0);
+            if (!found && mappingInfo.indexedPkColumns != null) {
+                for (boolean indexedPkColumn : mappingInfo.indexedPkColumns) {
+                    if (indexedPkColumn) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
             if (!found) {
                 for (ColumnMetadata cd : columns) {
-                    if (mappingInfo.fieldsToIdx.containsKey(cd.name.toString())) {
+                    if (SourceFieldMapper.NAME.equals(cd.name.toString()) || mappingInfo.fieldsToIdx.containsKey(cd.name.toString())) {
                         found = true;
                         break;
                     }

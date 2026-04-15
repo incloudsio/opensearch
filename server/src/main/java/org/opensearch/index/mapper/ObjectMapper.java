@@ -596,6 +596,16 @@ public class ObjectMapper extends Mapper implements Cloneable, CqlMapper {
         return this.enabled.value();
     }
 
+    @Override
+    public boolean hasField() {
+        for (Mapper mapper : mappers.values()) {
+            if (mapper.hasField()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Mapper getMapper(String field) {
         return mappers.get(field);
     }

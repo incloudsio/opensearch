@@ -53,6 +53,7 @@ import org.opensearch.search.lookup.SearchLookup;
 import java.time.ZoneId;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 public class TypeFieldMapper extends MetadataFieldMapper {
@@ -189,6 +190,17 @@ public class TypeFieldMapper extends MetadataFieldMapper {
         context.doc().add(new Field(fieldType().name(), context.sourceToParse().type(), fieldType));
         if (fieldType().hasDocValues()) {
             context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(MapperService.SINGLE_MAPPING_NAME)));
+        }
+    }
+
+    @Override
+    public void createField(ParseContext context, Object value, Optional<String> keyName) {
+        if (fieldType.indexOptions() == IndexOptions.NONE && !fieldType.stored()) {
+            return;
+        }
+        context.doc().add(new Field(fieldType().name(), context.type(), fieldType));
+        if (fieldType().hasDocValues()) {
+            context.doc().add(new SortedSetDocValuesField(fieldType().name(), new BytesRef(context.type())));
         }
     }
 

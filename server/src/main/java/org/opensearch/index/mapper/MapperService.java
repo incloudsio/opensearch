@@ -364,6 +364,15 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         return requireRefresh;
     }
 
+    private boolean mappingSourcesEqual(CompressedXContent left, CompressedXContent right) throws IOException {
+        if (left.equals(right)) {
+            return true;
+        }
+        Map<String, Object> leftMap = XContentHelper.convertToMap(left.compressedReference(), true, XContentType.JSON).v2();
+        Map<String, Object> rightMap = XContentHelper.convertToMap(right.compressedReference(), true, XContentType.JSON).v2();
+        return leftMap.equals(rightMap);
+    }
+
     private void assertMappingVersion(
         final IndexMetadata currentIndexMetadata,
         final IndexMetadata newIndexMetadata,
@@ -380,7 +389,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 if (defaultMapping != null) {
                     final CompressedXContent currentSource = currentIndexMetadata.defaultMapping().source();
                     final CompressedXContent newSource = defaultMapping.source();
-                    assert currentSource.equals(newSource) : "expected current mapping ["
+                    assert mappingSourcesEqual(currentSource, newSource) : "expected current mapping ["
                         + currentSource
                         + "] for type ["
                         + defaultMapping.type()
@@ -394,7 +403,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                 if (mapping != null) {
                     final CompressedXContent currentSource = currentIndexMetadata.mapping().source();
                     final CompressedXContent newSource = mapping.source();
-                    assert currentSource.equals(newSource) : "expected current mapping ["
+                    assert mappingSourcesEqual(currentSource, newSource) : "expected current mapping ["
                         + currentSource
                         + "] for type ["
                         + mapping.type()
@@ -403,7 +412,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                         + newSource
                         + "]";
                     final CompressedXContent mapperSource = new CompressedXContent(Strings.toString(mapper));
-                    assert currentSource.equals(mapperSource) : "expected current mapping ["
+                    assert mappingSourcesEqual(currentSource, mapperSource) : "expected current mapping ["
                         + currentSource
                         + "] for type ["
                         + mapping.type()
@@ -435,7 +444,7 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
                     if (currentMapping != null) {
                         final CompressedXContent currentSource = currentMapping.source();
                         final CompressedXContent newSource = documentMapper.mappingSource();
-                        assert currentSource.equals(newSource) == false : "expected current mapping ["
+                        assert mappingSourcesEqual(currentSource, newSource) == false : "expected current mapping ["
                             + currentSource
                             + "] for type ["
                             + documentMapper.type()
@@ -623,13 +632,19 @@ public class MapperService extends AbstractIndexComponent implements Closeable {
         DocumentMapper newMapper = parse(mapper.type(), mappingSource, false);
 
         if (newMapper.mappingSource().equals(mappingSource) == false) {
-            throw new IllegalStateException(
-                "DocumentMapper serialization result is different from source. \n--> Source ["
-                    + mappingSource
-                    + "]\n--> Result ["
-                    + newMapper.mappingSource()
-                    + "]"
-            );
+            // Elassandra: tolerate semantically-equal mapping serialization when cql_* metadata is
+            // preserved through a different but equivalent map ordering.
+            Map<String, Object> sourceMap = XContentHelper.convertToMap(mappingSource.compressedReference(), true, XContentType.JSON).v2();
+            Map<String, Object> resultMap = XContentHelper.convertToMap(newMapper.mappingSource().compressedReference(), true, XContentType.JSON).v2();
+            if (sourceMap.equals(resultMap) == false) {
+                throw new IllegalStateException(
+                    "DocumentMapper serialization result is different from source. \n--> Source ["
+                        + mappingSource
+                        + "]\n--> Result ["
+                        + newMapper.mappingSource()
+                        + "]"
+                );
+            }
         }
         return true;
     }

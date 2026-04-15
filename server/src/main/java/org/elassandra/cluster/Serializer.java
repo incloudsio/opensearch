@@ -26,11 +26,18 @@ import com.google.common.net.InetAddresses;
 
 import org.apache.cassandra.cql3.UserTypes;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.ByteType;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.CollectionType;
+import org.apache.cassandra.db.marshal.DecimalType;
+import org.apache.cassandra.db.marshal.DoubleType;
+import org.apache.cassandra.db.marshal.FloatType;
+import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.ListType;
+import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.SetType;
+import org.apache.cassandra.db.marshal.ShortType;
 import org.apache.cassandra.db.marshal.SimpleDateType;
 import org.apache.cassandra.db.marshal.TupleType;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -53,6 +60,7 @@ import org.opensearch.index.mapper.RangeFieldMapper.Range;
 import org.opensearch.index.query.RangeQueryBuilder;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -222,7 +230,7 @@ public class Serializer {
             // Native cassandra type, encoded with mapper if available.
             if (mapper != null) {
                 if (mapper instanceof FieldMapper) {
-                    return type.decompose( ((FieldMapper) mapper).fieldType().cqlValue(value, type) );
+                    return type.decompose(coerceNativeValue(type, ((FieldMapper) mapper).fieldType().cqlValue(value, type)));
                 } else if (mapper instanceof ObjectMapper && !((ObjectMapper)mapper).isEnabled()) {
                     // enabled=false => store field as json text
                     if (value instanceof Map) {
@@ -230,11 +238,40 @@ public class Serializer {
                         builder.map( (Map) value);
                         return type.decompose(BytesReference.bytes(builder).utf8ToString());
                     }
-                    return type.decompose( value );
+                    return type.decompose(coerceNativeValue(type, value));
                 }
             }
-            return type.decompose( value );
+            return type.decompose(coerceNativeValue(type, value));
         }
+    }
+
+    private static Object coerceNativeValue(AbstractType<?> type, Object value) {
+        if (value == null || (value instanceof Number) == false) {
+            return value;
+        }
+        Number number = (Number) value;
+        if (type instanceof LongType) {
+            return number.longValue();
+        }
+        if (type instanceof Int32Type || type instanceof SimpleDateType) {
+            return number.intValue();
+        }
+        if (type instanceof ShortType) {
+            return number.shortValue();
+        }
+        if (type instanceof ByteType) {
+            return number.byteValue();
+        }
+        if (type instanceof DoubleType) {
+            return number.doubleValue();
+        }
+        if (type instanceof FloatType) {
+            return number.floatValue();
+        }
+        if (type instanceof DecimalType && (value instanceof BigDecimal) == false) {
+            return new BigDecimal(value.toString());
+        }
+        return value;
     }
 
     public static Double convertToDouble(Object value) {
