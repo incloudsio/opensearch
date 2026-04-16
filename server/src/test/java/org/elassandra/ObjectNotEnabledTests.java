@@ -15,20 +15,13 @@
  */
 package org.elassandra;
 
-import org.apache.cassandra.cql3.UntypedResultSet;
-import org.apache.cassandra.db.ConsistencyLevel;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+import static org.hamcrest.Matchers.equalTo;
 
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.common.bytes.BytesReference;
 import org.opensearch.common.xcontent.XContentBuilder;
@@ -46,29 +39,8 @@ import org.junit.Test;
  */
 public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
 
-    private void createIndexAndWaitForReady(String index, XContentBuilder mapping, String... expectedColumns) throws Exception {
-        assertAcked(client().admin().indices().prepareCreate(index).addMapping("_doc", mapping).get());
-        assertBusy(() -> {
-            assertTrue(client().admin().indices().prepareExists(index).get().isExists());
-            UntypedResultSet columns = process(
-                    ConsistencyLevel.ONE,
-                    "SELECT column_name FROM system_schema.columns WHERE keyspace_name = ? AND table_name = ?",
-                    index,
-                    "_doc"
-            );
-            Set<String> columnNames = new HashSet<>();
-            for (UntypedResultSet.Row row : columns) {
-                columnNames.add(row.getString("column_name"));
-            }
-            for (String expectedColumn : expectedColumns) {
-                assertTrue("missing column " + expectedColumn + " in " + columnNames, columnNames.contains(expectedColumn));
-            }
-        }, 90, TimeUnit.SECONDS);
-    }
-
     @Test
     public void testNullDynamicField() throws Exception {
-        final String index = "null_dynamic_index";
         XContentBuilder mapping1 = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -78,18 +50,20 @@ public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
                     .endObject()
                 .endObject();
 
-        createIndexAndWaitForReady(index, mapping1, "_source", "foo");
+        assertAcked(client().admin().indices().prepareCreate("my_index")
+                .addMapping("_doc", mapping1)
+                .get());
+        ensureGreen("my_index");
 
-        IndexResponse resp = client().prepareIndex(index, "_doc", "1").setSource("{\"foo\" : \"bar\"}", XContentType.JSON).get();
+        IndexResponse resp = client().prepareIndex("my_index", "_doc", "1").setSource("{\"foo\" : \"bar\"}", XContentType.JSON).get();
         assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
-        resp = client().prepareIndex(index, "_doc", "2").setSource("{\"foo\" : \"bar\", \"bar\":null }", XContentType.JSON).get();
+        resp = client().prepareIndex("my_index", "_doc", "2").setSource("{\"foo\" : \"bar\", \"bar\":null }", XContentType.JSON).get();
         assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
     }
 
     @Test
     public void testNotEnabled() throws Exception {
-        final String index = "not_enabled_index";
         XContentBuilder mapping1 = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -107,9 +81,12 @@ public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
                     .endObject()
                 .endObject();
 
-        createIndexAndWaitForReady(index, mapping1, "_source", "last_updated", "session_data", "user_id");
+        assertAcked(client().admin().indices().prepareCreate("my_index")
+                .addMapping("_doc", mapping1)
+                .get());
+        ensureGreen("my_index");
 
-        assertThat(client().prepareIndex(index, "_doc", "session_1")
+        assertThat(client().prepareIndex("my_index", "_doc", "session_1")
                 .setSource("{ \"user_id\": \"kimchy\"," +
                              "\"session_data\": { " +
                                  "\"arbitrary_object\": {" +
@@ -120,26 +97,13 @@ public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
                 .get().getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
         assertBusy(() -> {
-            client().admin().indices().prepareRefresh(index).get();
-            SearchHits hits = client().prepareSearch().setIndices(index).setTypes("_doc")
-                    .setFetchSource(true)
+            client().admin().indices().prepareRefresh("my_index").get();
+            SearchHits hits = client().prepareSearch().setIndices("my_index").setTypes("_doc")
                     .setQuery(QueryBuilders.queryStringQuery("user_id:kimchy"))
                     .get().getHits();
 
             assertThat(hits.getTotalHits().value, equalTo(1L));
-            Map<String,Object> source = hits.getHits()[0].getSourceAsMap();
-            if (source == null) {
-                GetResponse getResponse = client().prepareGet(index, "_doc", "session_1").get();
-                source = getResponse.getSourceAsMap();
-            }
-            if (source == null) {
-                return;
-            }
-            Map<String,Object> sessionData = (Map<String,Object>) source.get("session_data");
-            if (sessionData == null) {
-                return;
-            }
-            assertThat(BytesReference.bytes(XContentFactory.jsonBuilder().map(sessionData)).utf8ToString(),
+            assertThat(BytesReference.bytes(XContentFactory.jsonBuilder().map((Map<String,Object>)hits.getHits()[0].getSourceAsMap().get("session_data"))).utf8ToString(),
                 equalTo("{\"arbitrary_object\":{\"some_array\":[\"foo\",\"bar\",{\"baz\":2}]}}"));
         }, 30, TimeUnit.SECONDS);
     }
@@ -147,8 +111,6 @@ public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
     // #146
     @Test
     public void testEmptyEnabledObject() throws Exception {
-        final String firstIndex = "empty_enabled_object_test1";
-        final String secondIndex = "empty_enabled_object_test2";
         XContentBuilder mapping1 = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -177,14 +139,19 @@ public class ObjectNotEnabledTests extends OpenSearchSingleNodeTestCase {
                         .endObject()
                     .endObject()
                 .endObject();
-        createIndexAndWaitForReady(firstIndex, mapping1, "_source", "id", "payload");
-        createIndexAndWaitForReady(secondIndex, mapping2, "_source", "id", "status");
+        assertAcked(client().admin().indices().prepareCreate("test1").addMapping("_doc", mapping1));
+        assertAcked(client().admin().indices().prepareCreate("test2").addMapping("_doc", mapping2));
 
-        IndexResponse resp = client().prepareIndex(firstIndex, "_doc", "1").setSource("{ \"payload\":{\"foo\" : \"bar\"}}", XContentType.JSON).get();
+        IndexResponse resp = client().prepareIndex("test1", "_doc", "1").setSource("{ \"payload\":{\"foo\" : \"bar\"}}", XContentType.JSON).get();
         assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
 
-        resp = client().prepareIndex(secondIndex, "_doc", "1").setSource("{ \"status\":{ \"payload\":{\"foo\" : \"bar\"}}}", XContentType.JSON).get();
+        resp = client().prepareIndex("test2", "_doc", "1").setSource("{ \"status\":{ \"payload\":{\"foo\" : \"bar\"}}}", XContentType.JSON).get();
         assertThat(resp.getResult(), equalTo(DocWriteResponse.Result.CREATED));
+    }
+
+    @Override
+    protected boolean resetNodeAfterTest() {
+        return true;
     }
 
 }

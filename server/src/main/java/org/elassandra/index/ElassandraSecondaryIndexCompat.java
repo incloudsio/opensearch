@@ -68,17 +68,41 @@ public final class ElassandraSecondaryIndexCompat {
     }
 
     public static void fieldMapperCreate(FieldMapper mapper, ParseContext ctx, Object value, Optional<String> keyName) throws IOException {
+        Object mapperValue = adaptExternalFieldValue(mapper, value);
         try {
             Method m = FieldMapper.class.getMethod("createField", ParseContext.class, Object.class, Optional.class);
-            m.invoke(mapper, ctx, value, keyName);
+            m.invoke(mapper, ctx, mapperValue, keyName);
         } catch (NoSuchMethodException e) {
             try {
-                mapper.parse(ctx.createExternalValueContext(value));
+                mapper.parse(ctx.createExternalValueContext(mapperValue));
             } catch (IOException ex) {
                 throw ex;
             } catch (RuntimeException ex) {
                 throw ex;
             }
+        } catch (InvocationTargetException e) {
+            Throwable c = e.getCause();
+            if (c instanceof IOException) {
+                throw (IOException) c;
+            }
+            if (c instanceof RuntimeException) {
+                throw (RuntimeException) c;
+            }
+            throw new IOException(c);
+        } catch (ReflectiveOperationException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static Object adaptExternalFieldValue(FieldMapper mapper, Object value) throws IOException {
+        if (value == null || mapper == null || mapper.getClass().getName().endsWith("RangeFieldMapper") == false) {
+            return value;
+        }
+        try {
+            Method parse = mapper.getClass().getMethod("parse", Object.class);
+            return parse.invoke(mapper, value);
+        } catch (NoSuchMethodException e) {
+            return value;
         } catch (InvocationTargetException e) {
             Throwable c = e.getCause();
             if (c instanceof IOException) {

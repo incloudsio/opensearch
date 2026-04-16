@@ -38,7 +38,6 @@ import org.opensearch.index.shard.ShardPath;
 import org.opensearch.index.translog.TruncateTranslogAction;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -61,6 +60,26 @@ import static org.hamcrest.Matchers.equalTo;
 //mvn test -Pdev -pl om.strapdata.elasticsearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
 public class SnapshotTests extends OpenSearchSingleNodeTestCase {
     private static final int SNAPSHOT_DOC_COUNT = 64;
+    private static final String AUTO_IMPORT_DANGLING_WARNING =
+        "[gateway.auto_import_dangling_indices] setting was deprecated in OpenSearch and will be removed in a future release! "
+            + "See the breaking changes documentation for the next major version.";
+    private static final String NO_JDK_DISTRIBUTION_WARNING =
+        "no-jdk distributions that do not bundle a JDK are deprecated and will be removed in a future release";
+    private boolean enableAutoImportDanglingIndices;
+
+    @Override
+    protected Settings nodeSettings() {
+        Settings.Builder builder = Settings.builder().put(super.nodeSettings());
+        if (enableAutoImportDanglingIndices) {
+            builder.put("gateway.auto_import_dangling_indices", true);
+        }
+        return builder.build();
+    }
+
+    @Override
+    protected boolean resetNodeAfterTest() {
+        return true;
+    }
 
     private String randomKeyspaceName(String prefix) {
         return (prefix + "_" + randomAlphaOfLength(8)).toLowerCase(Locale.ROOT);
@@ -94,6 +113,20 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
 
     private void refreshIndex(String index) {
         client().admin().indices().prepareRefresh(index).get();
+    }
+
+    private void assertIndexRemoved(String index) throws Exception {
+        assertBusy(() -> assertNull(client().admin().cluster().prepareState().get().getState().metadata().index(index)));
+    }
+
+    private void assertKeyspaceRemoved(String keyspace) throws Exception {
+        assertBusy(() -> assertNull(Schema.instance.getKeyspaceMetadata(keyspace)));
+    }
+
+    private void deleteIndexAndWaitForCleanup(String index) throws Exception {
+        assertAcked(client().admin().indices().prepareDelete(index).get());
+        assertIndexRemoved(index);
+        assertKeyspaceRemoved(index);
     }
 
     private void waitForStartedPrimaryShard(Index index) throws Exception {
@@ -133,11 +166,21 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         return clusterService().indexServiceSafe(index).getShardOrNull(0).shardPath();
     }
 
-    private void rebuildTranslogFromRestoredCommit(ShardPath shardPath) throws Exception {
-        final TruncateTranslogAction action = new TruncateTranslogAction(getInstanceFromNode(NamedXContentRegistry.class));
+    private void rebuildTranslogFromRestoredCommit(ShardPath shardPath, NamedXContentRegistry registry) throws Exception {
+        final TruncateTranslogAction action = new TruncateTranslogAction(registry);
         try (FSDirectory directory = FSDirectory.open(shardPath.resolveIndex())) {
             action.execute(new MockTerminal(), shardPath, directory);
         }
+    }
+
+    private void stopEmbeddedNode() throws Exception {
+        java.lang.reflect.Method stopNode = getClass().getSuperclass().getDeclaredMethod("stopNode");
+        stopNode.setAccessible(true);
+        stopNode.invoke(null);
+    }
+
+    private void restartEmbeddedNode() throws Exception {
+        startNode(random().nextLong());
     }
 
     // SSTable snapshotDir = data/<keyspace>/<table>/snapshots/<snapshot_name>/
@@ -199,7 +242,7 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         StorageService.instance.takeSnapshot("snap1", keyspace);
 
         // Recreate the schema before restore so the explicit snapshot is applied onto a fresh shard history.
-        assertAcked(client().admin().indices().prepareDelete(keyspace).get());
+        deleteIndexAndWaitForCleanup(keyspace);
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}", keyspace, DatabaseDescriptor.getLocalDataCenter()));
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE TABLE %s.t1 ( name text, age int, primary key (name))", keyspace));
         createIndex(keyspace, snapshotIndexSettings(),"t1", mapping);
@@ -215,7 +258,7 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         String dataLocation = DatabaseDescriptor.getAllDataFileLocations()[0];
         restoreSSTable(dataLocation, keyspace, "t1", srcCfId, Schema.instance.getTableMetadata(keyspace, "t1").id.asUUID(), "snap1");
         restoreLucenceFiles(luceneSnapshotRoot.resolve("snap1"), restoredLuceneIndexPath);
-        rebuildTranslogFromRestoredCommit(restoredShardPath);
+        rebuildTranslogFromRestoredCommit(restoredShardPath, getInstanceFromNode(NamedXContentRegistry.class));
 
         // refresh SSTables and repopen index
         StorageService.instance.loadNewSSTables(keyspace, "t1");
@@ -224,12 +267,12 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         waitForStartedPrimaryShard(resolveIndex(keyspace));
 
         assertSearchHitCount(keyspace, "t1", SNAPSHOT_DOC_COUNT);
-        assertAcked(client().admin().indices().prepareDelete(keyspace).get());
+        deleteIndexAndWaitForCleanup(keyspace);
+        allowedWarnings(AUTO_IMPORT_DANGLING_WARNING, NO_JDK_DISTRIBUTION_WARNING);
     }
 
     @Test
     //mvn test -Pdev -pl org.opensearch:elasticsearch -Dtests.seed=622A2B0618CE4676 -Dtests.class=org.elassandra.SnapshotTests -Dtests.method="onDropSnapshotTest" -Des.logger.level=ERROR -Dtests.assertion.disabled=false -Dtests.security.manager=false -Dtests.heap.size=1024m -Dtests.locale=ro-RO -Dtests.timezone=America/Toronto
-    @Ignore("Snapshot restore from drop-on-delete flow is not currently compatible with the OpenSearch 1.3 sidecar close-index behavior.")
     public void onDropSnapshotTest() throws Exception {
         final String keyspace = randomKeyspaceName("ks");
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}", keyspace, DatabaseDescriptor.getLocalDataCenter()));
@@ -254,7 +297,7 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
             StorageService.instance.takeTableSnapshot(keyspace, "t1", Long.toString(new Date().getTime()));
 
         // drop index + keyspace (C* snapshot before drop => flush before snapshot => ES flush before delete)
-        assertAcked(client().admin().indices().prepareDelete(keyspace).get());
+        deleteIndexAndWaitForCleanup(keyspace);
 
         // recreate schema and mapping
         process(ConsistencyLevel.ONE,String.format(Locale.ROOT, "CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', '%s': '1'}", keyspace, DatabaseDescriptor.getLocalDataCenter()));
@@ -265,11 +308,13 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         waitForStartedPrimaryShard(index2);
         Path luceneTargetIndexPath = luceneIndexPath(index2);
         ShardPath targetShardPath = shardPath(index2);
+        NamedXContentRegistry registry = getInstanceFromNode(NamedXContentRegistry.class);
+        UUID cfId2 = Schema.instance.getTableMetadata(keyspace,"t1").id.asUUID();
 
         assertSearchHitCount(keyspace, "t1", 0L);
 
-        // close index and restore SSTable+Lucene files
-        closeIndex(keyspace);
+        // Restore files while the embedded node is down so the recreated shard path is not actively held open.
+        stopEmbeddedNode();
 
         String dataLocation = DatabaseDescriptor.getAllDataFileLocations()[0];
         DirectoryStream<Path> stream = Files.newDirectoryStream(PathUtils.get(dataLocation+"/"+keyspace+"/t1-"+id+"/snapshots/"));
@@ -278,20 +323,25 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         System.out.println("snapshot name="+snap);
         stream.close();
 
-        UUID cfId2 = Schema.instance.getTableMetadata(keyspace,"t1").id.asUUID();
         restoreSSTable(dataLocation, keyspace, "t1", cfId, cfId2, snap);
         restoreLucenceFiles(luceneSourceSnapshotRoot.resolve(snap), luceneTargetIndexPath);
-        rebuildTranslogFromRestoredCommit(targetShardPath);
+        rebuildTranslogFromRestoredCommit(targetShardPath, registry);
 
-        // refresh SSTables and repopen index
-        StorageService.instance.loadNewSSTables(keyspace, "t1");
-        openIndex(keyspace);
-        ensureGreen(keyspace);
-        waitForStartedPrimaryShard(resolveIndex(keyspace));
+        enableAutoImportDanglingIndices = true;
+        try {
+            restartEmbeddedNode();
+            StorageService.instance.loadNewSSTables(keyspace, "t1");
+            ensureGreen(keyspace);
+            waitForStartedPrimaryShard(resolveIndex(keyspace));
+            refreshIndex(keyspace);
+        } finally {
+            enableAutoImportDanglingIndices = false;
+        }
 
         Thread.sleep(3000);
         assertSearchHitCount(keyspace, "t1", SNAPSHOT_DOC_COUNT);
-        assertAcked(client().admin().indices().prepareDelete(keyspace).get());
+        deleteIndexAndWaitForCleanup(keyspace);
+        allowedWarnings(AUTO_IMPORT_DANGLING_WARNING, NO_JDK_DISTRIBUTION_WARNING);
     }
 
     @Test
@@ -321,5 +371,6 @@ public class SnapshotTests extends OpenSearchSingleNodeTestCase {
         assertThat(rs.size(), equalTo(N));
 
         process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "DROP KEYSPACE %s", keyspace));
+        allowedWarnings(AUTO_IMPORT_DANGLING_WARNING, NO_JDK_DISTRIBUTION_WARNING);
     }
 }

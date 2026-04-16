@@ -16,7 +16,6 @@
 package org.elassandra.index.search;
 
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.index.shard.IndexSearcherWrapper;
@@ -50,7 +49,6 @@ public class TokenRangesSearcherWrapper extends IndexSearcherWrapper {
 
     @Override
     public final DirectoryReader wrap(final DirectoryReader in) throws IOException {
-        ShardSearchRequest request = current();
         // OpenSearch 1.3: ShardSearchRequest does not yet carry Cassandra token-ranges; restore TokenRangesDirectoryReader when SearchRequest is extended.
         return in;
     }

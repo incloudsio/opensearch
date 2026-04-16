@@ -24,7 +24,6 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.text.ParseException;
@@ -118,7 +117,6 @@ public class RangeFieldTests extends OpenSearchSingleNodeTestCase {
     }
 
     @Test
-    @Ignore("Range field storage is not currently compatible with the OpenSearch 1.3 sidecar Cassandra UDT layout.")
     public void testRangeTypes() throws Exception {
         for(String type : TYPES) {
             doTestRangeQuery(type);

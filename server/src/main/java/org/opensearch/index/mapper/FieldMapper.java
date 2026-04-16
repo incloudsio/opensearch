@@ -924,7 +924,7 @@ public abstract class FieldMapper extends Mapper implements Cloneable, CqlMapper
     public CqlMapper.CqlCollection cqlCollection() {
         String value = elassandraCqlMeta(TypeParsers.CQL_COLLECTION);
         if (value == null) {
-            return name().startsWith("_") ? CqlMapper.CqlCollection.NONE : CqlMapper.CqlCollection.LIST;
+            return CqlMapper.CqlCollection.NONE;
         }
         switch (value.toLowerCase(java.util.Locale.ROOT)) {
             case "list":

@@ -364,8 +364,16 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
             return dateMathParser;
         }
 
+        private boolean isTimeuuid() {
+            String cqlType = meta().get(TypeParsers.CQL_TYPE);
+            return cqlType != null && "timeuuid".equalsIgnoreCase(cqlType);
+        }
+
         // Visible for testing.
         public long parse(String value) {
+            if (isTimeuuid()) {
+                return resolution.convert(Instant.ofEpochMilli(org.apache.cassandra.utils.UUIDGen.unixTimestamp(java.util.UUID.fromString(value))));
+            }
             return resolution.convert(DateFormatters.from(dateTimeFormatter().parse(value), dateTimeFormatter().locale()).toInstant());
         }
 
@@ -594,6 +602,9 @@ public final class DateFieldMapper extends ParametrizedFieldMapper {
         public Object cqlValue(Object value) {
             if (value == null) {
                 return null;
+            }
+            if (isTimeuuid()) {
+                return value instanceof java.util.UUID ? value : java.util.UUID.fromString(value.toString());
             }
             if (value instanceof java.util.Date) {
                 return value;

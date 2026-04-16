@@ -43,7 +43,6 @@ public class ExplainTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testExplain() throws Exception {
-        final String index = "explain_test_index";
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                     .startObject("properties")
@@ -59,15 +58,14 @@ public class ExplainTests extends OpenSearchSingleNodeTestCase {
                         .endObject()
                     .endObject()
                 .endObject();
-        assertAcked(client().admin().indices().prepareCreate(index).addMapping("t1", mapping));
-        ensureGreen(index);
+        assertAcked(client().admin().indices().prepareCreate("test").addMapping("t1", mapping));
+        ensureGreen("test");
 
         long N = 10;
         for(int i=0; i < N; i++)
-            process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO %s.t1 (id, f1) VALUES ('%d',%d)", index, i, i));
-        assertThat(client().prepareSearch().setIndices(index).setQuery(QueryBuilders.termQuery("f1", 1)).get().getHits().getTotalHits().value, equalTo(1L));
-        assertThat(client().prepareExplain(index, "t1", "1").setQuery(QueryBuilders.termQuery("f1", 1)).get().hasExplanation(), equalTo(true));
+            process(ConsistencyLevel.ONE, String.format(Locale.ROOT, "INSERT INTO test.t1 (id, f1) VALUES ('%d',%d)", i,i));
+        assertThat(client().prepareSearch().setIndices("test").setQuery(QueryBuilders.termQuery("f1", 1)).get().getHits().getTotalHits().value, equalTo(1L));
+        assertThat(client().prepareExplain("test", "t1", "1").setQuery(QueryBuilders.termQuery("f1", 1)).get().hasExplanation(), equalTo(true));
     }
-
 }
 
