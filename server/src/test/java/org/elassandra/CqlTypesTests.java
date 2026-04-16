@@ -1102,7 +1102,14 @@ public class CqlTypesTests extends OpenSearchSingleNodeTestCase {
     // #292 test
     @Test
     public void testStringMappedAsMultiFields() throws Exception {
-        process(ConsistencyLevel.ONE, "CREATE KEYSPACE example WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': 1};");
+        process(
+            ConsistencyLevel.ONE,
+            String.format(
+                Locale.ROOT,
+                "CREATE KEYSPACE example WITH replication = {'class': 'NetworkTopologyStrategy', '%s': 1};",
+                DatabaseDescriptor.getLocalDataCenter()
+            )
+        );
         process(ConsistencyLevel.ONE,"CREATE TABLE example.sessions (id text, day text, PRIMARY KEY ((id)));");
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
@@ -1159,7 +1166,14 @@ public class CqlTypesTests extends OpenSearchSingleNodeTestCase {
 
     @Test
     public void testClusteringOrderColumnDiscover() throws Exception {
-        process(ConsistencyLevel.ONE, "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', 'DC1': 1};");
+        process(
+            ConsistencyLevel.ONE,
+            String.format(
+                Locale.ROOT,
+                "CREATE KEYSPACE ks WITH replication = {'class': 'NetworkTopologyStrategy', '%s': 1};",
+                DatabaseDescriptor.getLocalDataCenter()
+            )
+        );
         process(ConsistencyLevel.ONE, "CREATE TABLE ks.test (id int, timestamp timestamp, PRIMARY KEY (id, timestamp)) WITH CLUSTERING ORDER BY (timestamp DESC)");
         assertAcked(client().admin().indices().prepareCreate("ks").addMapping("test", discoverMapping("test")));
     }

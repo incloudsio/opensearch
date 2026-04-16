@@ -18,6 +18,7 @@ package org.elassandra;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.lessThan;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.opensearch.action.admin.indices.segments.IndexShardSegments;
 import org.opensearch.action.admin.indices.segments.ShardSegments;
@@ -40,7 +41,12 @@ public class TokenRangesBisetCacheTests extends OpenSearchSingleNodeTestCase {
     @Test
     @Ignore("Token range bitset cache behavior is not currently compatible with the OpenSearch 1.3 sidecar query execution path.")
     public void tokenBitsetTest() throws Exception {
-        process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS test WITH replication={ 'class':'NetworkTopologyStrategy', 'DC1':'1' }");
+        process(
+            ConsistencyLevel.ONE,
+            "CREATE KEYSPACE IF NOT EXISTS test WITH replication={ 'class':'NetworkTopologyStrategy', '"
+                + DatabaseDescriptor.getLocalDataCenter()
+                + "':'1' }"
+        );
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS test.t1 ( a int,b bigint, primary key (a) )");
 
         XContentBuilder mapping = XContentFactory.jsonBuilder().startObject().startObject("t1").field("discover", ".*").endObject().endObject();

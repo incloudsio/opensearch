@@ -15,6 +15,7 @@
  */
 package org.elassandra;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.SystemKeyspace;
@@ -147,7 +148,15 @@ public class IndexBuildTests extends OpenSearchSingleNodeTestCase {
     @Test
     public void testDelayedIndexBuild() throws Exception {
         String index = randomIndexName("test");
-        process(ConsistencyLevel.ONE,"CREATE KEYSPACE IF NOT EXISTS " + index + " WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', 'DC1':'1' }");
+        process(
+            ConsistencyLevel.ONE,
+            String.format(
+                Locale.ROOT,
+                "CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = { 'class' : 'NetworkTopologyStrategy', '%s':'1' }",
+                index,
+                DatabaseDescriptor.getLocalDataCenter()
+            )
+        );
         process(ConsistencyLevel.ONE,"CREATE TABLE IF NOT EXISTS " + index + ".t1 ( a int,b text, primary key (a) )");
         int i=0;
         for(int j=0 ; j < N; j++) {

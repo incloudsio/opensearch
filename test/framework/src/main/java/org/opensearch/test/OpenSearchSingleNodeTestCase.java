@@ -299,6 +299,22 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
         Thread.setDefaultUncaughtExceptionHandler(uncaughtBeforeElassandraTest);
     }
 
+    private static boolean isCassandraDefaultUncaughtExceptionHandler(Thread.UncaughtExceptionHandler handler) {
+        if (handler == null) {
+            return false;
+        }
+        String className = handler.getClass().getName();
+        return className.startsWith("org.apache.cassandra.service.CassandraDaemon")
+            || className.contains("org.apache.cassandra.service.CassandraDaemon$$Lambda");
+    }
+
+    private static void snapshotDefaultUncaughtExceptionHandlerIfSafe() {
+        Thread.UncaughtExceptionHandler current = Thread.getDefaultUncaughtExceptionHandler();
+        if (isCassandraDefaultUncaughtExceptionHandler(current) == false) {
+            uncaughtBeforeElassandraTest = current;
+        }
+    }
+
     /**
      * {@link com.carrotsearch.randomizedtesting.ThreadLeakControl} calls {@code checkZombies()} at the start of each
      * test {@link org.junit.runners.model.Statement} <em>before</em> {@code @Before} — too early for instance hooks.
@@ -385,6 +401,13 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
                 System.setProperty("cassandra.custom_query_handler_class", "org.elassandra.index.ElasticQueryHandler");
             }
             System.out.println("cassandra.custom_query_handler_class="+System.getProperty("cassandra.custom_query_handler_class"));
+            if (System.getProperty("cassandra.allow_unsafe_join") == null) {
+                // Embedded single-node tests have no real peers; skip Cassandra's production shadow-round collision check.
+                System.setProperty("cassandra.allow_unsafe_join", "true");
+            }
+            if (System.getProperty("cassandra.auto_bootstrap") == null) {
+                System.setProperty("cassandra.auto_bootstrap", "false");
+            }
 
             if (Boolean.parseBoolean(System.getProperty("elassandra.test.config.override", "true"))) {
                 DatabaseDescriptor.daemonInitialization(() -> {
@@ -396,14 +419,20 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
                     org.apache.cassandra.config.Config c = new org.apache.cassandra.config.Config();
                     c.commitlog_sync = org.apache.cassandra.config.Config.CommitLogSync.periodic;
                     c.commitlog_sync_period_in_ms = 10000;
+                    c.auto_bootstrap = false;
                     c.data_file_directories = new String[] { new java.io.File(home, "data").getPath() };
                     c.commitlog_directory = new java.io.File(home, "commitlog").getPath();
                     c.saved_caches_directory = new java.io.File(home, "saved_caches").getPath();
                     c.hints_directory = new java.io.File(home, "hints").getPath();
                     c.storage_port = Integer.getInteger("elassandra.test.storage_port", 17100);
+                    int storagePort = Integer.getInteger("elassandra.test.storage_port", 17100);
+                    c.storage_port = storagePort;
+                    c.listen_address = "127.0.0.1";
+                    c.broadcast_address = "127.0.0.1";
+                    c.rpc_address = "127.0.0.1";
                     c.partitioner = "org.apache.cassandra.dht.Murmur3Partitioner";
                     c.endpoint_snitch = "org.apache.cassandra.locator.GossipingPropertyFileSnitch";
-                    java.util.Map<String, String> seedParams = java.util.Collections.singletonMap("seeds", "127.0.0.1");
+                    java.util.Map<String, String> seedParams = java.util.Collections.singletonMap("seeds", "127.0.0.1:" + storagePort);
                     c.seed_provider = new org.apache.cassandra.config.ParameterizedClass(
                         "org.apache.cassandra.locator.SimpleSeedProvider",
                         seedParams
@@ -745,7 +774,7 @@ public abstract class OpenSearchSingleNodeTestCase extends OpenSearchTestCase {
 
     @BeforeClass
     public static synchronized void setUpClass() throws Exception {
-        uncaughtBeforeElassandraTest = Thread.getDefaultUncaughtExceptionHandler();
+        snapshotDefaultUncaughtExceptionHandlerIfSafe();
         clearRandomizedZombieMarker();
     }
 
