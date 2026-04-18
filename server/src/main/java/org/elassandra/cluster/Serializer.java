@@ -81,6 +81,19 @@ public class Serializer {
 
     private static com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
+    private static Range parseRangeValue(RangeFieldMapper rangeFieldMapper, Object value) throws IOException {
+        try {
+            return (Range) RangeFieldMapper.class.getMethod("parse", Object.class).invoke(rangeFieldMapper, value);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof IOException) {
+                throw (IOException) e.getCause();
+            }
+            throw new IOException("Failed to parse range value for mapper [" + rangeFieldMapper.name() + "]", e.getCause());
+        } catch (ReflectiveOperationException e) {
+            throw new IOException("RangeFieldMapper.parse(Object) is unavailable", e);
+        }
+    }
+
     // wrap string values with quotes
     public static String stringify(Object o) throws IOException {
         Object v = toJsonValue(o);
@@ -159,7 +172,7 @@ public class Serializer {
             if (mapper instanceof RangeFieldMapper) {
                 // parse a range field to serialized C* UDT
                 RangeFieldMapper rangeFieldMapper = (RangeFieldMapper)mapper;
-                Range range = rangeFieldMapper.parse(value);
+                Range range = parseRangeValue(rangeFieldMapper, value);
                 components[i++]=serialize(ksName, cfName, udt.fieldType(0), RangeQueryBuilder.FROM_FIELD.getPreferredName(), rangeFieldMapper.fieldType().cqlValue(range.getFrom()), null);
                 components[i++]=serialize(ksName, cfName, udt.fieldType(1), RangeQueryBuilder.TO_FIELD.getPreferredName(), rangeFieldMapper.fieldType().cqlValue(range.getTo()), null);
                 components[i++]=serialize(ksName, cfName, udt.fieldType(2), "include_lower", range.isIncludeFrom(), null);
